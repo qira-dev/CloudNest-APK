@@ -1,50 +1,70 @@
 package com.qiradev.cloudnest.ui
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import com.qiradev.cloudnest.R
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.qiradev.cloudnest.AppServices
+import kotlinx.coroutines.launch
+
+private sealed interface AppScreen {
+    data object Archive : AppScreen
+    data object Trash : AppScreen
+}
 
 /**
- * Step 0 placeholder screen: logo + app name. Real screens follow specs/09
- * and use the cloud logo from branding/ as the single visual source.
+ * App shell (specs/09): state-based navigation between the archive browse screen
+ * and the trash screen. The engine graph is assembled once per composition root
+ * through [AppServices] and shared by every future screen.
  */
 @Composable
 fun CloudNestApp() {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Image(
-                painter = painterResource(id = R.mipmap.ic_launcher),
-                contentDescription = "CloudNest logo",
-                modifier = Modifier.size(96.dp)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val db = remember { AppServices.db(context) }
+    val archiveService = remember { AppServices.archiveService(db) }
+    val controller = remember { ArchiveUiController(db, archiveService, scope) }
+
+    var screen by remember { mutableStateOf<AppScreen>(AppScreen.Archive) }
+
+    LaunchedEffect(Unit) { controller.refreshFolder() }
+
+    when (screen) {
+        AppScreen.Archive -> {
+            BackHandler(enabled = (controller.folderState as? FolderUiState.Ready)
+                ?.breadcrumbs?.any { it.name.isNotEmpty() } == true) {
+                controller.openFolder(null)
+            }
+            ArchiveScreen(
+                state = controller.folderState,
+                onOpenFolder = { id -> controller.openFolder(id) },
+                onOpenRoot = { controller.openFolder(null) },
+                onOpenTrash = {
+                    screen = AppScreen.Trash
+                    controller.refreshTrash()
+                },
+                onCreateFolder = { name -> controller.createFolder(name) },
+                onTrashFolder = { id -> controller.trashFolder(id) },
+                onTrashFile = { id -> controller.trashFile(id) },
+                onRetry = { controller.refreshFolder() },
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = stringResource(id = R.string.app_name),
-                style = MaterialTheme.typography.headlineMedium
+        }
+        AppScreen.Trash -> {
+            BackHandler { screen = AppScreen.Archive }
+            TrashScreen(
+                state = controller.trashState,
+                onBack = { screen = AppScreen.Archive },
+                onRestoreFile = { id -> controller.restoreFile(id) },
+                onRestoreFolder = { id -> controller.restoreFolder(id) },
+                onDeleteFileForever = { id -> controller.deleteFileForever(id) },
+                onDeleteFolderForever = { id -> controller.deleteFolderForever(id) },
+                onEmptyTrash = { controller.emptyTrash() },
+                onRetry = { controller.refreshTrash() },
             )
         }
     }

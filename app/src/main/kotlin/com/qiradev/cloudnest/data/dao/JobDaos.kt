@@ -85,6 +85,12 @@ interface DeletionAttemptDao {
     @Insert
     suspend fun insert(attempt: DeletionAttemptEntity)
 
+    @Update
+    suspend fun update(attempt: DeletionAttemptEntity)
+
+    @Query("SELECT * FROM deletion_attempts WHERE id = :id")
+    suspend fun getById(id: String): DeletionAttemptEntity?
+
     @Query("SELECT * FROM deletion_attempts WHERE file_id = :fileId ORDER BY started_at")
     suspend fun listByFile(fileId: String): List<DeletionAttemptEntity>
 

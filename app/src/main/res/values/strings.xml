@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">CloudNest</string>
+
+    <!-- Archive browsing (specs/09 screens 3–4, 11). Localized versions arrive with
+         the language pass (step 9); defaults stay English per the language policy. -->
+    <string name="screen_archive">Archive</string>
+    <string name="screen_trash">Trash</string>
+    <string name="action_new_folder">New folder</string>
+    <string name="action_move_to_trash">Move to trash</string>
+    <string name="action_restore">Restore</string>
+    <string name="action_delete_forever">Delete forever</string>
+    <string name="action_empty_trash">Empty trash</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_create">Create</string>
+    <string name="label_empty_folder">This folder is empty</string>
+    <string name="label_empty_trash">Trash is empty</string>
+    <string name="label_loading">Loading…</string>
+    <string name="label_error_generic">Something went wrong</string>
+    <string name="trash_purges_in_days">Goes away forever in %1$d days</string>
+    <string name="trash_purges_today">Goes away forever today</string>
+    <string name="dialog_new_folder_title">New folder</string>
+    <string name="dialog_folder_name_hint">Folder name</string>
+    <string name="dialog_delete_forever_title">Delete forever?</string>
+    <string name="dialog_delete_forever_text">This item and its cloud chunks are removed permanently. This cannot be undone.</string>
+    <string name="dialog_empty_trash_text">Everything in the trash is removed permanently. This cannot be undone.</string>
+    <string name="cd_open_trash">Open trash</string>
+    <string name="cd_create_folder">Create folder</string>
+    <string name="cd_folder_icon">Folder</string>
+    <string name="cd_file_icon">File</string>
+    <string name="cd_restore">Restore item</string>
+    <string name="cd_delete_forever">Delete item forever</string>
+    <string name="cd_empty_trash">Empty trash</string>
+    <string name="cd_back">Back</string>
 </resources>

@@ -24,6 +24,22 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE parent_id IS :parentId AND deleted_at IS NULL ORDER BY name COLLATE NOCASE")
     suspend fun listChildren(parentId: String?): List<FolderEntity>
 
+    /** The app root (specs/01 §1.4): parent_id = NULL and name = "". */
+    @Query("SELECT * FROM folders WHERE parent_id IS NULL AND name = '' LIMIT 1")
+    suspend fun getRoot(): FolderEntity?
+
+    /** Whole tree in one read — descendant walks are computed in Kotlin. */
+    @Query("SELECT * FROM folders ORDER BY created_at")
+    suspend fun listAll(): List<FolderEntity>
+
+    /** Trash screen + purge scan (specs/01 §1.4). */
+    @Query("SELECT * FROM folders WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+    suspend fun listTrashed(): List<FolderEntity>
+
+    /** Rows whose retention window (purge_at) has elapsed (specs/01 §1.4). */
+    @Query("SELECT * FROM folders WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL AND purge_at <= :now")
+    suspend fun listPurgeDue(now: Long): List<FolderEntity>
+
     @Query("DELETE FROM folders WHERE id = :id")
     suspend fun delete(id: String)
 }
@@ -42,8 +58,20 @@ interface FileDao {
     @Query("SELECT * FROM files WHERE folder_id = :folderId AND deleted_at IS NULL ORDER BY name COLLATE NOCASE")
     suspend fun listByFolder(folderId: String): List<FileEntity>
 
-    /** Duplicate-name guard for uploads (`name (2)` renaming happens in the engine). */
-    @Query("SELECT COUNT(*) FROM files WHERE folder_id = :folderId AND name = :name")
+    /** All file rows under the given folders, trashed or not (trash cascade + restore). */
+    @Query("SELECT * FROM files WHERE folder_id IN (:folderIds)")
+    suspend fun listByFolders(folderIds: List<String>): List<FileEntity>
+
+    /** Trash screen + purge scan (specs/01 §1.5). */
+    @Query("SELECT * FROM files WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+    suspend fun listTrashed(): List<FileEntity>
+
+    /** Rows whose retention window (purge_at) has elapsed (specs/01 §1.5). */
+    @Query("SELECT * FROM files WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL AND purge_at <= :now")
+    suspend fun listPurgeDue(now: Long): List<FileEntity>
+
+    /** Duplicate-name guard for uploads (`name (2)` renaming happens in the engine); trashed names are freed. */
+    @Query("SELECT COUNT(*) FROM files WHERE folder_id = :folderId AND name = :name AND deleted_at IS NULL")
     suspend fun countByNameInFolder(folderId: String, name: String): Int
 
     @Query("DELETE FROM files WHERE id = :id")

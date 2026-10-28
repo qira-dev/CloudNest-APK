@@ -86,6 +86,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
+    // Archive screens use extended icons (folder/trash/restore); R8 strips the rest.
+    implementation("androidx.compose.material:material-icons-extended")
 
     // Room data layer (specs/01) — SQLite, WAL, versioned migrations.
     implementation("androidx.room:room-runtime:2.6.1")
