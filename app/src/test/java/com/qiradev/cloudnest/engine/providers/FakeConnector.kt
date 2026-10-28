@@ -31,6 +31,16 @@ class FakeConnector(override val id: String = "google_drive") : ProviderConnecto
     var uploadFailure: Exception? = null
     var corruptDownloadsRemaining = 0
 
+    // Download observability for the download-engine tests.
+    val failingRemoteIds = mutableSetOf<String>()
+    var downloadSleepMs: Long = 0
+    var currentDownloads = 0
+        private set
+    var maxConcurrentDownloads = 0
+        private set
+    var downloadCount = 0
+        private set
+
     override suspend fun buildAuthUrl(state: String): Uri =
         Uri.parse("https://fake.example/oauth/authorize?state=$state")
 
@@ -69,12 +79,25 @@ class FakeConnector(override val id: String = "google_drive") : ProviderConnecto
 
     override suspend fun downloadChunk(tokens: TokenPair, remoteId: String): ByteArray {
         require(remoteId.startsWith("remote-"))
-        val bytes = chunks.getValue(remoteId.removePrefix("remote-"))
-        if (corruptDownloadsRemaining > 0) {
-            corruptDownloadsRemaining--
-            return bytes.copyOf().also { it[0] = (it[0].toInt() + 1).toByte() }
+        downloadCount++
+        if (remoteId in failingRemoteIds) {
+            throw java.io.IOException("fake download failure for $remoteId")
         }
-        return bytes
+        val bytes = chunks.getValue(remoteId.removePrefix("remote-"))
+        if (downloadSleepMs > 0) Thread.sleep(downloadSleepMs)
+        synchronized(this) {
+            currentDownloads++
+            if (currentDownloads > maxConcurrentDownloads) maxConcurrentDownloads = currentDownloads
+        }
+        try {
+            if (corruptDownloadsRemaining > 0) {
+                corruptDownloadsRemaining--
+                return bytes.copyOf().also { it[0] = (it[0].toInt() + 1).toByte() }
+            }
+            return bytes
+        } finally {
+            synchronized(this) { currentDownloads-- }
+        }
     }
 
     override suspend fun deleteObject(tokens: TokenPair, remoteId: String) {
