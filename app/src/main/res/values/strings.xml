@@ -33,4 +33,18 @@
     <string name="cd_delete_forever">Delete item forever</string>
     <string name="cd_empty_trash">Empty trash</string>
     <string name="cd_back">Back</string>
+
+    <!-- File detail (specs/09 screen 5, specs/06 §1.3). -->
+    <string name="screen_file_detail">File details</string>
+    <string name="action_back">Back</string>
+    <string name="action_complete_mirror">Complete mirror</string>
+    <string name="badge_protected">Protected (2 copies)</string>
+    <string name="badge_mirror_pending">1 copy — mirror pending</string>
+    <string name="badge_mirror_failed">1 copy — mirror failed</string>
+    <string name="label_chunk_count">%1$d chunks</string>
+    <string name="label_chunk_title">Chunk %1$d</string>
+    <string name="label_primary_copy">Primary copy on %1$s</string>
+    <string name="label_mirror_copy">Mirror copy on %1$s</string>
+    <string name="label_verified">verified</string>
+    <string name="label_no_copies">No cloud copies yet</string>
 </resources>

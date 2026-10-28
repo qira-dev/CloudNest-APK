@@ -5,6 +5,7 @@ import com.qiradev.cloudnest.data.entity.ChunkPlacementEntity
 import com.qiradev.cloudnest.data.entity.FileChunkEntity
 import com.qiradev.cloudnest.data.entity.PlacementRole
 import com.qiradev.cloudnest.data.entity.PlacementStatus
+import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.providers.ProviderConnector
 import com.qiradev.cloudnest.engine.providers.ProviderErrorCode
 import com.qiradev.cloudnest.engine.providers.ProviderException
@@ -15,12 +16,14 @@ import java.io.IOException
  * Chunk fetching (specs/03 §2): primary copy first, mirror on failure;
  * 3 attempts with 5s/15s/60s backoff per copy; every copy is hash-verified —
  * a copy delivering wrong bytes is marked suspicious (FAILED) for diagnostics.
+ * Every copy-fetch outcome feeds the health ledger (specs/06 §2.1).
  */
 class ChunkFetcher(
     private val db: CloudNestDatabase,
     private val connectors: Map<String, ProviderConnector>,
     private val tokens: TokenProvider,
     private val delayFn: suspend (Long) -> Unit,
+    private val health: HealthTracker? = null,
 ) {
     suspend fun fetch(chunk: FileChunkEntity): ByteArray {
         val placements = db.chunkPlacementDao().listByChunk(chunk.id)
@@ -31,11 +34,20 @@ class ChunkFetcher(
         for (placement in placements) {
             try {
                 val bytes = downloadWithRetries(placement)
-                if (Verifier.matches(bytes, chunk)) return bytes
+                if (Verifier.matches(bytes, chunk)) {
+                    health?.recordSuccess(placement.accountId, kind = "download")
+                    return bytes
+                }
                 markSuspicious(placement)
+                health?.recordFailure(
+                    placement.accountId,
+                    DownloadErrorCode.CHUNK_HASH_MISMATCH,
+                    kind = "download",
+                )
                 lastError = DownloadJobException(DownloadErrorCode.CHUNK_HASH_MISMATCH)
             } catch (e: DownloadJobException) {
                 if (e.errorCode == DownloadErrorCode.CHUNK_HASH_MISMATCH) markSuspicious(placement)
+                health?.recordFailure(placement.accountId, e.errorCode, kind = "download")
                 lastError = e
             }
         }

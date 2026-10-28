@@ -7,7 +7,10 @@ import androidx.compose.runtime.setValue
 import com.qiradev.cloudnest.data.CloudNestDatabase
 import com.qiradev.cloudnest.data.entity.FileEntity
 import com.qiradev.cloudnest.data.entity.FolderEntity
+import com.qiradev.cloudnest.data.entity.PlacementRole
+import com.qiradev.cloudnest.data.entity.PlacementStatus
 import com.qiradev.cloudnest.engine.archive.ArchiveService
+import com.qiradev.cloudnest.engine.mirror.MirrorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -42,6 +45,32 @@ sealed interface TrashUiState {
     }
 }
 
+/** Protection badge on the file detail screen (specs/06 §1.3). */
+enum class ProtectionBadge { PROTECTED, MIRROR_PENDING, MIRROR_FAILED }
+
+/** One chunk's copies as shown on the detail screen (specs/09 screen 5). */
+data class CopyRow(
+    val chunkIndex: Int,
+    val rows: List<CopyPlacement>,
+)
+
+data class CopyPlacement(
+    val accountLabel: String,
+    val isMirror: Boolean,
+    val verified: Boolean,
+)
+
+/** File detail state (specs/09 screen 5). */
+sealed interface FileDetailUiState {
+    data object Loading : FileDetailUiState
+    data class Error(val message: String) : FileDetailUiState
+    data class Ready(
+        val file: FileEntity,
+        val copies: List<CopyRow>,
+        val badge: ProtectionBadge,
+    ) : FileDetailUiState
+}
+
 /**
  * Drives the archive + trash screens (specs/09 screens 3/4/11) on top of
  * [ArchiveService]. Pure state holder — no Android imports — so the flows are
@@ -51,6 +80,7 @@ sealed interface TrashUiState {
 class ArchiveUiController(
     private val db: CloudNestDatabase,
     private val archive: ArchiveService,
+    private val mirror: MirrorService,
     private val scope: CoroutineScope,
 ) {
     var folderState: FolderUiState by mutableStateOf(FolderUiState.Loading)
@@ -59,11 +89,15 @@ class ArchiveUiController(
     var trashState: TrashUiState by mutableStateOf(TrashUiState.Loading)
         private set
 
+    var fileDetailState: FileDetailUiState by mutableStateOf(FileDetailUiState.Loading)
+        private set
+
     /** Bumped after every mutation so screens can react without polling. */
     var revision: Int by mutableIntStateOf(0)
         private set
 
     private var currentFolderId: String? = null
+    private var currentDetailFileId: String? = null
 
     /** Injectable wall clock — tests pin time instead of sleeping. */
     var clock: () -> Long = System::currentTimeMillis
@@ -158,6 +192,73 @@ class ArchiveUiController(
         scope.launch {
             runCatching { archive.emptyTrash() }
             refreshTrash()
+        }
+    }
+
+    // ---- file detail (specs/09 screen 5, specs/06 §1.3) ----
+
+    fun openFileDetail(fileId: String) {
+        currentDetailFileId = fileId
+        refreshFileDetail()
+    }
+
+    fun refreshFileDetail() {
+        val fileId = currentDetailFileId ?: return
+        scope.launch {
+            fileDetailState = try {
+                val file = db.fileDao().getById(fileId) ?: error("no file: $fileId")
+                val chunks = db.fileChunkDao().listByFile(fileId)
+                val accounts = db.providerAccountDao().getAll().associateBy { it.id }
+                val placementsByChunk = db.chunkPlacementDao().listByFile(fileId).groupBy { it.chunkId }
+                var failed = false
+                var pending = false
+                val copies = chunks.map { chunk ->
+                    val placements = placementsByChunk[chunk.id].orEmpty()
+                    val mirrors = placements.filter { it.role == PlacementRole.MIRROR }
+                    if (mirrors.any { it.status == PlacementStatus.FAILED }) failed = true
+                    if (mirrors.none { it.status == PlacementStatus.VERIFIED }) pending = true
+                    CopyRow(
+                        chunkIndex = chunk.chunkIndex,
+                        rows = placements
+                            .filter { it.remoteId != null }
+                            .map { placement ->
+                                CopyPlacement(
+                                    accountLabel = accounts[placement.accountId]?.label ?: placement.accountId,
+                                    isMirror = placement.role == PlacementRole.MIRROR,
+                                    verified = placement.status == PlacementStatus.VERIFIED,
+                                )
+                            },
+                    )
+                }
+                FileDetailUiState.Ready(
+                    file = file,
+                    copies = copies,
+                    badge = when {
+                        failed -> ProtectionBadge.MIRROR_FAILED
+                        pending -> ProtectionBadge.MIRROR_PENDING
+                        else -> ProtectionBadge.PROTECTED
+                    },
+                )
+            } catch (e: Exception) {
+                FileDetailUiState.Error(e.message ?: "unknown")
+            }
+        }
+    }
+
+    /** "মিরর সম্পূর্ণ করো" (specs/06 §1.2): queues a fresh mirror job. */
+    fun completeMirror() {
+        val fileId = currentDetailFileId ?: return
+        scope.launch {
+            runCatching { mirror.enqueueJob(fileId) }
+            refreshFileDetail()
+        }
+    }
+
+    fun trashFromDetail() {
+        val fileId = currentDetailFileId ?: return
+        scope.launch {
+            runCatching { archive.trashFile(fileId) }
+            refreshFolder()
         }
     }
 }

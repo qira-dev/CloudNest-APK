@@ -6,6 +6,7 @@ import com.qiradev.cloudnest.data.entity.FileStatus
 import com.qiradev.cloudnest.data.entity.JobKind
 import com.qiradev.cloudnest.data.entity.JobStatus
 import com.qiradev.cloudnest.data.entity.TransferJobEntity
+import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.providers.ProviderConnector
 import com.qiradev.cloudnest.engine.upload.NetworkGate
 import com.qiradev.cloudnest.engine.upload.NetworkGate.AlwaysAllowed
@@ -58,10 +59,12 @@ class DownloadService(
     private val tokens: TokenProvider,
     private val networkGate: NetworkGate = AlwaysAllowed,
     private val memoryBudgetBytes: Long = MEMORY_BUDGET_BYTES,
+    /** Health ledger (specs/06 §2.1) — download outcomes count toward the verdict. */
+    private val health: HealthTracker? = null,
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val fetcher = ChunkFetcher(db, connectors, tokens, delayFn)
+    private val fetcher = ChunkFetcher(db, connectors, tokens, delayFn, health)
     private val outputs = ConcurrentHashMap<String, DownloadOutput>()
 
     fun registerOutput(jobId: String, output: DownloadOutput) {

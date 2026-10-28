@@ -5,6 +5,8 @@ import com.qiradev.cloudnest.data.CloudNestDatabase
 import com.qiradev.cloudnest.data.DatabaseProvider
 import com.qiradev.cloudnest.data.entity.Providers
 import com.qiradev.cloudnest.engine.archive.ArchiveService
+import com.qiradev.cloudnest.engine.health.HealthTracker
+import com.qiradev.cloudnest.engine.mirror.MirrorService
 import com.qiradev.cloudnest.engine.providers.AesGcmKeystoreCipher
 import com.qiradev.cloudnest.engine.providers.ProviderConnector
 import com.qiradev.cloudnest.engine.providers.ProviderErrorCode
@@ -14,6 +16,7 @@ import com.qiradev.cloudnest.engine.providers.TokenStore
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConfig
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConnector
 import com.qiradev.cloudnest.engine.upload.TokenProvider
+import com.qiradev.cloudnest.engine.upload.UploadService
 
 /**
  * Single place where the production engine graph is assembled (specs/10 §4):
@@ -51,4 +54,22 @@ object AppServices {
 
     fun archiveService(db: CloudNestDatabase): ArchiveService =
         ArchiveService(db, connectors(), tokenProvider(db, tokenStore()))
+
+    /**
+     * One health ledger per process (specs/06 §2.1) — memory state, replayed
+     * from upload_attempts at startup by the background layer (specs/05).
+     */
+    @Volatile
+    private var healthSingleton: HealthTracker? = null
+
+    fun health(): HealthTracker =
+        healthSingleton ?: synchronized(this) {
+            healthSingleton ?: HealthTracker().also { healthSingleton = it }
+        }
+
+    fun mirrorService(db: CloudNestDatabase): MirrorService =
+        MirrorService(db, connectors(), tokenProvider(db, tokenStore()), health())
+
+    fun uploadService(db: CloudNestDatabase): UploadService =
+        UploadService(db, connectors(), tokenProvider(db, tokenStore()), health = health())
 }

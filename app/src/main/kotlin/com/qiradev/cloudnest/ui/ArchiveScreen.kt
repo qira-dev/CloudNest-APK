@@ -82,6 +82,7 @@ fun ArchiveScreen(
     onCreateFolder: (String) -> Unit,
     onTrashFolder: (String) -> Unit,
     onTrashFile: (String) -> Unit,
+    onOpenFile: (String) -> Unit,
     onRetry: () -> Unit,
 ) {
     var showNewFolderDialog by remember { mutableStateOf(false) }
@@ -144,7 +145,7 @@ fun ArchiveScreen(
                                 HorizontalDivider()
                             }
                             items(state.files, key = { "file-${it.id}" }) { file ->
-                                FileRow(file, onTrashFile)
+                                FileRow(file, onOpenFile, onTrashFile)
                                 HorizontalDivider()
                             }
                         }
@@ -234,6 +235,7 @@ private fun FolderRow(
 @Composable
 private fun FileRow(
     file: FileEntity,
+    onOpen: (String) -> Unit,
     onTrash: (String) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -247,7 +249,7 @@ private fun FileRow(
         leadingContent = { Icon(Icons.Filled.Description, contentDescription = fileLabel) },
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = {}, onLongClick = { menuOpen = true }),
+            .combinedClickable(onClick = { onOpen(file.id) }, onLongClick = { menuOpen = true }),
         trailingContent = {
             Box {
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

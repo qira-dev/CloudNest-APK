@@ -11,10 +11,13 @@ import com.qiradev.cloudnest.data.entity.NotificationEntity
 import com.qiradev.cloudnest.data.entity.NotificationType
 import com.qiradev.cloudnest.data.entity.PlacementRole
 import com.qiradev.cloudnest.data.entity.PlacementStatus
+import com.qiradev.cloudnest.data.entity.ProviderAccountStatus
 import com.qiradev.cloudnest.data.entity.ReservationEntity
 import com.qiradev.cloudnest.data.entity.TransferJobEntity
 import com.qiradev.cloudnest.data.entity.UploadAttemptEntity
 import com.qiradev.cloudnest.data.entity.UploadAttemptResult
+import com.qiradev.cloudnest.engine.health.Health
+import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.providers.ProviderConnector
 import com.qiradev.cloudnest.engine.providers.ProviderErrorCode
 import com.qiradev.cloudnest.engine.providers.ProviderException
@@ -59,6 +62,8 @@ data class UploadSettings(
     val reservePerAccountBytes: Long = 0,
     val safetyMarginBytes: Long = 0,
     val strategy: String = RoutingStrategy.CAPACITY_AWARE,
+    /** specs/06 §1.1 — mirroring defaults to on; only the settings store turns it off. */
+    val mirrorEnabled: Boolean = true,
 )
 
 /** Terminal job failure carrying the safe error code. */
@@ -79,6 +84,8 @@ class UploadService(
     private val tokens: TokenProvider,
     private val networkGate: NetworkGate = NetworkGate.AlwaysAllowed,
     private val settings: UploadSettings = UploadSettings(),
+    /** Health ledger (specs/06 §2) — Down accounts leave the upload routing pool. */
+    private val health: HealthTracker? = null,
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -179,6 +186,8 @@ class UploadService(
                 // Job finished → its space reservations are released (specs/01 §1.8).
                 db.reservationDao().deleteByJob(jobId)
                 notify(NotificationType.UPLOAD_DONE, """{"file":"${jsonEscape(db.fileDao().getById(file.id)!!.name)}"}""")
+                // specs/06 §1.2: mirroring is its own job AFTER the upload is complete.
+                enqueueMirrorJobIfEligible(file.id)
             }
         } catch (e: UploadJobException) {
             failJob(jobId, e.errorCode)
@@ -307,7 +316,10 @@ class UploadService(
             settings.reservePerAccountBytes,
             settings.safetyMarginBytes,
         )
-        val eligible = capacities.filter { it.isEligible }
+        // specs/06 §2.2: Down accounts never receive new uploads.
+        val eligible = capacities.filter { capacity ->
+            capacity.isEligible && health?.verdict(capacity.representativeId) != Health.DOWN
+        }
 
         var chosenSize = file.chunkSizeMib
         var plan: RoutePlan? = null
@@ -422,6 +434,7 @@ class UploadService(
                     placement.copy(status = PlacementStatus.UPLOADED, remoteId = remoteId, uploadedAt = clock()),
                 )
                 finishAttempt(placement.id, attemptNo, UploadAttemptResult.OK, null)
+                health?.recordSuccess(account.id, kind = "upload")
                 return
             } catch (e: WifiPauseRequiredException) {
                 abandonAttempt(placement.id, attemptNo)
@@ -433,6 +446,7 @@ class UploadService(
             } catch (e: Throwable) {
                 val code = errorCodeOf(e)
                 finishAttempt(placement.id, attemptNo, UploadAttemptResult.ERROR, code)
+                health?.recordFailure(account.id, code, kind = "upload")
                 if (!isRetryable(code) || attemptNo >= MAX_ATTEMPTS) {
                     db.chunkPlacementDao().update(placement.copy(status = PlacementStatus.FAILED))
                     throw UploadJobException(code, e)
@@ -468,6 +482,7 @@ class UploadService(
                 }
                 db.chunkPlacementDao().update(current.copy(status = PlacementStatus.VERIFIED))
                 finishAttempt(current.id, attemptNo, UploadAttemptResult.OK, null)
+                health?.recordSuccess(account.id, kind = "upload")
                 return
             } catch (e: WifiPauseRequiredException) {
                 abandonAttempt(current.id, attemptNo)
@@ -479,6 +494,7 @@ class UploadService(
             } catch (e: Throwable) {
                 val code = errorCodeOf(e)
                 finishAttempt(current.id, attemptNo, UploadAttemptResult.ERROR, code)
+                health?.recordFailure(account.id, code, kind = "upload")
                 if (code == UploadErrorCode.CHUNK_HASH_MISMATCH && current.remoteId != null) {
                     // Corrupt remote copy: delete it, re-upload from scratch, re-verify.
                     runCatching { connector.deleteObject(tokens.validTokens(account.id), current.remoteId!!) }
@@ -502,6 +518,36 @@ class UploadService(
     }
 
     // ---- helpers ----
+
+    /**
+     * specs/06 §1: a mirror job is queued when mirroring is on AND at least two
+     * connected accounts of the file's provider exist. One account → no mirror.
+     */
+    private suspend fun enqueueMirrorJobIfEligible(fileId: String) {
+        if (!settings.mirrorEnabled) return
+        val placements = db.chunkPlacementDao().listByFile(fileId)
+        val providers = placements.mapNotNull { placement ->
+            db.providerAccountDao().getById(placement.accountId)?.provider
+        }.toSet()
+        if (providers.isEmpty()) return
+        val connected = db.providerAccountDao().getAll()
+            .filter { it.status == ProviderAccountStatus.CONNECTED && it.provider in providers }
+        val sameProviderCount = providers.maxOf { provider -> connected.count { it.provider == provider } }
+        if (sameProviderCount < 2) return
+        val now = clock()
+        db.transferJobDao().insert(
+            TransferJobEntity(
+                id = UUID.randomUUID().toString(),
+                kind = JobKind.MIRROR,
+                fileId = fileId,
+                status = JobStatus.QUEUED,
+                errorCode = null,
+                attempts = 0,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+    }
 
     private suspend fun jobStillRunning(jobId: String): Boolean =
         db.transferJobDao().getById(jobId)?.status == JobStatus.RUNNING

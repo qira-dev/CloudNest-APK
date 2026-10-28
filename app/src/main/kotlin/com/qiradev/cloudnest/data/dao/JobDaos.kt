@@ -78,7 +78,24 @@ interface UploadAttemptDao {
     /** 30-day retention (specs/01 §1.10). */
     @Query("DELETE FROM upload_attempts WHERE finished_at IS NOT NULL AND finished_at < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long): Int
+
+    /** Health replay (specs/06 §2.1): recent outcomes with the owning account. */
+    @Query(
+        "SELECT chunk_placements.account_id AS accountId, upload_attempts.result AS result, " +
+            "upload_attempts.error_code AS errorCode, upload_attempts.finished_at AS finishedAt " +
+            "FROM upload_attempts JOIN chunk_placements ON chunk_placements.id = upload_attempts.placement_id " +
+            "WHERE upload_attempts.finished_at IS NOT NULL AND upload_attempts.finished_at >= :since",
+    )
+    suspend fun recentAttemptOutcomes(since: Long): List<AttemptOutcome>
 }
+
+/** Flat projection for [UploadAttemptDao.recentAttemptOutcomes]. */
+data class AttemptOutcome(
+    val accountId: String,
+    val result: String?,
+    val errorCode: String?,
+    val finishedAt: Long,
+)
 
 @Dao
 interface DeletionAttemptDao {

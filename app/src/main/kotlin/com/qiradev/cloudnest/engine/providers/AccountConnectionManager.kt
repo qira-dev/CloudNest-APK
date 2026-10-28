@@ -7,17 +7,20 @@ import com.qiradev.cloudnest.data.entity.AuditEventType
 import com.qiradev.cloudnest.data.entity.ProviderAccountEntity
 import com.qiradev.cloudnest.data.entity.ProviderAccountStatus
 import com.qiradev.cloudnest.data.entity.QuotaStatus
+import com.qiradev.cloudnest.engine.health.HealthTracker
 import java.util.UUID
 
 /**
  * Drives the connect/refresh/disconnect flows of specs/04 §2+§4 on top of the
  * provider contract and the Room data layer. Tokens only exist encrypted.
+ * Quota-call outcomes feed the health ledger (specs/06 §2.1).
  */
 class AccountConnectionManager(
     private val db: CloudNestDatabase,
     private val tokenStore: TokenStore,
     private val connectors: Map<String, ProviderConnector>,
     private val stateStore: OAuthStateStore,
+    private val health: HealthTracker? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val accountDao: ProviderAccountDao get() = db.providerAccountDao()
@@ -115,11 +118,22 @@ class AccountConnectionManager(
     /** Regular quota observation (specs/04 §4): the token-health clock. */
     suspend fun refreshQuota(accountId: String) {
         val account = account(accountId)
+        val tokens = try {
+            getValidTokens(accountId)
+        } catch (e: ProviderException) {
+            health?.recordFailure(accountId, e.code, kind = "quota")
+            if (e.code == ProviderErrorCode.AUTH_EXPIRED) {
+                throw e
+            }
+            // Down/rate-limited/unreadable keep the account connected; routing skips it.
+            accountDao.update(account.copy(quotaStatus = QuotaStatus.UNKNOWN, lastUsedAt = clock()))
+            return
+        }
         try {
-            observeQuota(accountId, connectorFor(account.provider), getValidTokens(accountId))
+            // observeQuota records its own outcome; keep the original swallow semantics.
+            observeQuota(accountId, connectorFor(account.provider), tokens)
         } catch (e: ProviderException) {
             if (e.code != ProviderErrorCode.AUTH_EXPIRED) {
-                // Down/rate-limited/unreadable keep the account connected; routing skips it.
                 accountDao.update(account.copy(quotaStatus = QuotaStatus.UNKNOWN, lastUsedAt = clock()))
             } else {
                 throw e
@@ -146,9 +160,11 @@ class AccountConnectionManager(
         try {
             val quota = connector.readQuota(tokens)
             if (quota == null) {
+                health?.recordFailure(accountId, ProviderErrorCode.QUOTA_UNKNOWN, kind = "quota")
                 accountDao.update(account.copy(quotaStatus = QuotaStatus.UNKNOWN, quotaObservedAt = now))
                 return
             }
+            health?.recordSuccess(accountId, kind = "quota")
             accountDao.update(
                 account.copy(
                     quotaTotalBytes = quota.totalBytes,
@@ -159,6 +175,7 @@ class AccountConnectionManager(
                 ),
             )
         } catch (e: ProviderException) {
+            health?.recordFailure(accountId, e.code, kind = "quota")
             if (e.code == ProviderErrorCode.QUOTA_UNKNOWN) {
                 accountDao.update(account.copy(quotaStatus = QuotaStatus.UNKNOWN, quotaObservedAt = now))
             } else {
