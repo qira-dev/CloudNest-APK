@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
+.kotlin/
+
+# Signing material must never be committed (AGENT.md rule 9, specs/08 §5)
+*.jks
+*.keystore
+keystore.properties
