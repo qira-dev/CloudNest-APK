@@ -31,6 +31,10 @@ interface ReservationDao {
     @Query("DELETE FROM reservations WHERE job_id NOT IN (SELECT id FROM transfer_jobs)")
     suspend fun deleteOrphaned(): Int
 
+    /** Startup recovery (specs/02 §7): reservations of jobs no longer alive. */
+    @Query("DELETE FROM reservations WHERE job_id IN (SELECT id FROM transfer_jobs WHERE status NOT IN ('queued', 'running', 'paused'))")
+    suspend fun deleteForInactiveJobs(): Int
+
     @Query("SELECT * FROM reservations")
     suspend fun getAll(): List<ReservationEntity>
 }
@@ -52,6 +56,9 @@ interface TransferJobDao {
 
     @Query("SELECT * FROM transfer_jobs WHERE status = :status ORDER BY created_at")
     suspend fun listByStatus(status: String): List<TransferJobEntity>
+
+    @Query("SELECT * FROM transfer_jobs WHERE kind = :kind AND status = :status ORDER BY created_at")
+    suspend fun listByKindAndStatus(kind: String, status: String): List<TransferJobEntity>
 
     @Query("DELETE FROM transfer_jobs WHERE id = :id")
     suspend fun delete(id: String)

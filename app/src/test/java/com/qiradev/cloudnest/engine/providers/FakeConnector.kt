@@ -24,6 +24,13 @@ class FakeConnector(override val id: String = "google_drive") : ProviderConnecto
     val chunks = mutableMapOf<String, ByteArray>()
     val deletedRemoteIds = mutableListOf<String>()
 
+    // Failure injection for engine tests.
+    var uploadCount = 0
+        private set
+    var uploadFailuresRemaining = 0
+    var uploadFailure: Exception? = null
+    var corruptDownloadsRemaining = 0
+
     override suspend fun buildAuthUrl(state: String): Uri =
         Uri.parse("https://fake.example/oauth/authorize?state=$state")
 
@@ -51,13 +58,23 @@ class FakeConnector(override val id: String = "google_drive") : ProviderConnecto
 
     override suspend fun uploadChunk(tokens: TokenPair, root: String, name: String, bytes: ByteArray): String {
         require(root == "fake-root")
+        uploadCount++
+        if (uploadFailuresRemaining > 0) {
+            uploadFailuresRemaining--
+            throw uploadFailure ?: java.io.IOException("fake upload failure")
+        }
         chunks[name] = bytes
         return "remote-$name"
     }
 
     override suspend fun downloadChunk(tokens: TokenPair, remoteId: String): ByteArray {
         require(remoteId.startsWith("remote-"))
-        return chunks.getValue(remoteId.removePrefix("remote-"))
+        val bytes = chunks.getValue(remoteId.removePrefix("remote-"))
+        if (corruptDownloadsRemaining > 0) {
+            corruptDownloadsRemaining--
+            return bytes.copyOf().also { it[0] = (it[0].toInt() + 1).toByte() }
+        }
+        return bytes
     }
 
     override suspend fun deleteObject(tokens: TokenPair, remoteId: String) {

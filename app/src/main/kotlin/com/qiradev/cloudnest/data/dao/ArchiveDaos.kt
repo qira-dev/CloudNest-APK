@@ -82,6 +82,14 @@ interface ChunkPlacementDao {
     @Query("SELECT * FROM chunk_placements WHERE chunk_id = :chunkId")
     suspend fun listByChunk(chunkId: String): List<ChunkPlacementEntity>
 
+    /** All placements of a file's chunks (upload/download engine working set). */
+    @Query(
+        "SELECT chunk_placements.* FROM chunk_placements " +
+            "JOIN file_chunks ON file_chunks.id = chunk_placements.chunk_id " +
+            "WHERE file_chunks.file_id = :fileId ORDER BY file_chunks.chunk_index",
+    )
+    suspend fun listByFile(fileId: String): List<ChunkPlacementEntity>
+
     @Query("SELECT * FROM chunk_placements WHERE account_id = :accountId AND status = :status")
     suspend fun listByAccountAndStatus(accountId: String, status: String): List<ChunkPlacementEntity>
 
