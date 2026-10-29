@@ -6,6 +6,7 @@ import com.qiradev.cloudnest.data.DatabaseProvider
 import com.qiradev.cloudnest.data.entity.Providers
 import com.qiradev.cloudnest.engine.archive.ArchiveService
 import com.qiradev.cloudnest.engine.diagnostics.DiagnosticsService
+import com.qiradev.cloudnest.engine.download.DownloadService
 import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.mirror.MirrorService
 import com.qiradev.cloudnest.engine.providers.AccountConnectionManager
@@ -80,6 +81,9 @@ object AppServices {
 
     fun mirrorService(db: CloudNestDatabase): MirrorService =
         MirrorService(db, connectors(), tokenProvider(db, tokenStore()), health())
+
+    fun downloadService(db: CloudNestDatabase): DownloadService =
+        DownloadService(db, connectors(), tokenProvider(db, tokenStore()), health = health())
 
     fun uploadService(db: CloudNestDatabase): UploadService =
         UploadService(db, connectors(), tokenProvider(db, tokenStore()), health = health())

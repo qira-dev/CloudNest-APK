@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per-app language support (specs/09 §13): Android 13+ system language
+     settings list these locales; the in-app picker covers every API level. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="bn" />
+    <locale android:name="zh" />
+    <locale android:name="es" />
+    <locale android:name="de" />
+    <locale android:name="ru" />
+    <locale android:name="fr" />
+    <locale android:name="ja" />
+    <locale android:name="pt" />
+</locale-config>

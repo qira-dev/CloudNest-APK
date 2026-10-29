@@ -70,6 +70,10 @@ interface FileDao {
     @Query("SELECT * FROM files WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL AND purge_at <= :now")
     suspend fun listPurgeDue(now: Long): List<FileEntity>
 
+    /** Queue screen labels (specs/09 screen 7): files referenced by transfer jobs. */
+    @Query("SELECT * FROM files WHERE id IN (:ids)")
+    suspend fun getAllByIds(ids: List<String>): List<FileEntity>
+
     /** Duplicate-name guard for uploads (`name (2)` renaming happens in the engine); trashed names are freed. */
     @Query("SELECT COUNT(*) FROM files WHERE folder_id = :folderId AND name = :name AND deleted_at IS NULL")
     suspend fun countByNameInFolder(folderId: String, name: String): Int

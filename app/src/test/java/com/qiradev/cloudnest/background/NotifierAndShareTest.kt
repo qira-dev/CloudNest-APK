@@ -84,7 +84,7 @@ class NotifierTest {
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
         Shadows.shadowOf(context.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(true)
-        val relayJob = NotificationRelay.start(db, notifier, kotlinx.coroutines.GlobalScope)
+        val relayJob = NotificationRelay.start({ db }, notifier, kotlinx.coroutines.GlobalScope)
 
         // New rows since relay start: failure shows, success stays feed-only.
         db.notificationDao().insert(
@@ -117,7 +117,7 @@ class NotifierTest {
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
         Shadows.shadowOf(context.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(true)
-        val relayJob = NotificationRelay.start(db, notifier, kotlinx.coroutines.GlobalScope)
+        val relayJob = NotificationRelay.start({ db }, notifier, kotlinx.coroutines.GlobalScope)
         val manager = Shadows.shadowOf(context.getSystemService(NotificationManager::class.java))
 
         // specs/05 §2.2: a failed upload reaches the phone with file name + Retry.

@@ -35,15 +35,19 @@ import java.util.Date
 
 /**
  * File detail (specs/09 screen 5, specs/06 §1.3): metadata, per-chunk copies
- * with their accounts, the protection badge, and the mirror action. Download
- * and share buttons arrive with the FileProvider export binding (step 9).
+ * with their accounts, the protection badge, the mirror action and — from
+ * step 9 — the download/export actions (specs/03 §4: open/share through the
+ * cache export, save through SAF).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileDetailScreen(
     state: FileDetailUiState,
+    downloadState: DownloadUiState?,
     onBack: () -> Unit,
     onCompleteMirror: () -> Unit,
+    onDownloadOpenShare: () -> Unit,
+    onDownloadSaveTo: (android.net.Uri) -> Unit,
     onMoveToTrash: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -147,10 +151,16 @@ fun FileDetailScreen(
                             }
                         }
                         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            DownloadActionsRow(
+                                state = state,
+                                downloadState = downloadState,
+                                onDownloadOpenShare = onDownloadOpenShare,
+                                onDownloadSaveTo = onDownloadSaveTo,
+                            )
                             if (state.badge != ProtectionBadge.PROTECTED) {
                                 Button(
                                     onClick = onCompleteMirror,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                                 ) { Text(stringResource(R.string.action_complete_mirror)) }
                             }
                             OutlinedButton(
@@ -163,4 +173,73 @@ fun FileDetailScreen(
             }
         }
     }
+}
+
+/** The two download paths of specs/03 §4 + the running download's progress. */
+@Composable
+private fun DownloadActionsRow(
+    state: FileDetailUiState.Ready,
+    downloadState: DownloadUiState?,
+    onDownloadOpenShare: () -> Unit,
+    onDownloadSaveTo: (android.net.Uri) -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val saveTarget = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri -> if (uri != null) onDownloadSaveTo(uri) }
+
+    androidx.compose.foundation.layout.Row(modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = onDownloadOpenShare,
+            enabled = downloadState == null,
+            modifier = Modifier.weight(1f),
+        ) { Text(stringResource(R.string.action_download_open)) }
+        OutlinedButton(
+            onClick = { saveTarget.launch(state.file.name) },
+            enabled = downloadState == null,
+            modifier = Modifier.weight(1f).padding(start = 8.dp),
+        ) { Text(stringResource(R.string.action_download_save)) }
+    }
+    when (downloadState) {
+        is DownloadUiState.Running -> androidx.compose.foundation.layout.Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.download_running), style = MaterialTheme.typography.bodySmall)
+        }
+        is DownloadUiState.Done -> downloadState.filePath?.let { path ->
+            // specs/03 §4.1: the assembled cache export is opened/shared through FileProvider.
+            TextButton(
+                onClick = { shareExport(context, path, state.file.mimeType) },
+                modifier = Modifier.padding(top = 4.dp),
+            ) { Text(stringResource(R.string.action_share_export)) }
+        }
+        is DownloadUiState.Failed -> Text(
+            stringResource(R.string.download_failed, downloadState.errorCode),
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        null -> {}
+    }
+}
+
+/** Share intent for a finished cache export (specs/03 §4.1). */
+private fun shareExport(context: android.content.Context, filePath: String, mimeType: String) {
+    val file = java.io.File(filePath)
+    if (!file.exists()) return
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.files",
+        file,
+    )
+    val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = mimeType.ifEmpty { "application/octet-stream" }
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        android.content.Intent.createChooser(share, file.name)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 }

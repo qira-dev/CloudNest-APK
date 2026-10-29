@@ -153,6 +153,15 @@ class AccountConnectionManager(
         }
     }
 
+    /**
+     * User-driven rename (specs/09 screen 9 "লেবেল বদল"): a plain label update —
+     * the fixed audit type set (specs/01 §1.13) has no rename entry.
+     */
+    suspend fun renameAccount(accountId: String, label: String) {
+        val account = account(accountId)
+        accountDao.update(account.copy(label = label.trim()))
+    }
+
     /** User-driven disconnect (specs/04 §4): tokens wiped, chunk objects stay in the cloud. */
     suspend fun disconnect(accountId: String) {
         val account = account(accountId)

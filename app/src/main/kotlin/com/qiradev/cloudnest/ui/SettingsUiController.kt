@@ -10,40 +10,47 @@ import com.qiradev.cloudnest.data.SettingsKeys
 import com.qiradev.cloudnest.data.entity.AuditEventEntity
 import com.qiradev.cloudnest.data.entity.AuditEventType
 import com.qiradev.cloudnest.data.entity.SettingsEntity
+import com.qiradev.cloudnest.background.Notifier
 import com.qiradev.cloudnest.engine.security.Backup
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Settings screen state (specs/09 screen 13 — storage policy + backup). */
+/** Settings screen state (specs/09 screen 13). */
 data class SettingsUiState(
     val wifiOnlyUpload: Boolean = true,
     val chunkSizeMib: Int = 64,
+    val routingStrategy: String = "capacity_aware",
     val mirrorEnabled: Boolean = true,
     val trashRetentionDays: Int = 7,
     val backupReminderEnabled: Boolean = true,
     val lastBackupAt: Long = 0L,
+    val themeMode: String = "system",
+    val language: String = "en",
+    val phoneNotify: Map<String, Boolean> = emptyMap(),
+    val unlockConfigured: Boolean = false,
 )
 
-/** Backup export/import outcome surfaced to the screen. */
+/** Backup/unlock outcome surfaced to the screen. */
 sealed interface BackupUiEvent {
     data class ExportDone(val bytes: Long) : BackupUiEvent
     data object RestoreDone : BackupUiEvent
+    data object UnlockChanged : BackupUiEvent
     data class BackupFailed(val reason: String) : BackupUiEvent
 }
 
 /**
- * Drives the settings screen (specs/09 §13, step-8 scope: storage policy +
- * backup). Every write lands in the `settings` table and is audited as
- * `settings_changed` (specs/01 §1.2/§1.13). Backup export/import wrap
- * [Backup]; a successful restore asks the screen to restart the process —
- * in-memory graph state (notification relay, controllers) holds stale
- * references to the replaced database.
+ * Drives the settings screen (specs/09 §13). Every write lands in the
+ * `settings` table and is audited as `settings_changed` (specs/01
+ * §1.2/§1.13). Backup export/import wrap [Backup]; a successful restore asks
+ * the screen to restart the process — in-memory graph state (notification
+ * relay, controllers) holds stale references to the replaced database.
  */
 class SettingsUiController(
     private val db: CloudNestDatabase,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val unlock: com.qiradev.cloudnest.engine.security.UnlockManager? = null,
 ) {
 
     var state: SettingsUiState by mutableStateOf(SettingsUiState())
@@ -84,6 +91,46 @@ class SettingsUiController(
 
     fun setBackupReminderEnabled(enabled: Boolean) =
         write(BACKUP_REMINDER_KEY, enabled.toString()) { copy(backupReminderEnabled = enabled) }
+
+    /** specs/02 §3 + specs/09 §13: capacity-aware vs balanced routing. */
+    fun setRoutingStrategy(strategy: String) = write(SettingsKeys.ROUTING_STRATEGY, strategy) {
+        copy(routingStrategy = strategy)
+    }
+
+    /** specs/09 §13: theme follows the phone by default; manual override allowed. */
+    fun setThemeMode(mode: String) = write(SettingsKeys.THEME_MODE, mode) { copy(themeMode = mode) }
+
+    /** specs/09 §13: 9 languages; the caller recreates the activity to apply. */
+    fun setLanguage(tag: String, onChanged: () -> Unit) {
+        write(SettingsKeys.LANGUAGE, tag) { copy(language = tag) }
+        onChanged()
+    }
+
+    /** specs/05 §2.2 + specs/09 §13: per-type "ফোনে দেখাও" toggle. */
+    fun setPhoneNotify(type: String, enabled: Boolean) =
+        write(Notifier.phoneNotifyKey(type), enabled.toString()) {
+            copy(phoneNotify = phoneNotify + (type to enabled))
+        }
+
+    /** specs/09 §13 security group: change the unlock password (old verified first). */
+    fun changeUnlock(oldPassword: String, newPassword: String) {
+        val manager = unlock ?: return
+        scope.launch {
+            try {
+                when (manager.verify(oldPassword)) {
+                    com.qiradev.cloudnest.engine.security.UnlockResult.Unlocked -> {}
+                    else -> {
+                        event = BackupUiEvent.BackupFailed("wrong_password")
+                        return@launch
+                    }
+                }
+                manager.setUnlockPassword(newPassword)
+                event = BackupUiEvent.UnlockChanged
+            } catch (e: Exception) {
+                event = BackupUiEvent.BackupFailed(e.message ?: "unlock_failed")
+            }
+        }
+    }
 
     /**
      * Export (specs/08 §4.2): the complete DB goes to the SAF-picked location;
@@ -157,10 +204,19 @@ class SettingsUiController(
         return SettingsUiState(
             wifiOnlyUpload = dao.getValue(SettingsKeys.WIFI_ONLY_UPLOAD)?.toBooleanStrictOrNull() ?: true,
             chunkSizeMib = dao.getValue(SettingsKeys.CHUNK_SIZE_MIB)?.toIntOrNull() ?: 64,
+            routingStrategy = dao.getValue(SettingsKeys.ROUTING_STRATEGY)
+                ?: SettingsKeys.Defaults.ROUTING_STRATEGY,
             mirrorEnabled = dao.getValue(SettingsKeys.MIRROR_ENABLED)?.toBooleanStrictOrNull() ?: true,
             trashRetentionDays = dao.getValue(SettingsKeys.TRASH_RETENTION_DAYS)?.toIntOrNull() ?: 7,
             backupReminderEnabled = dao.getValue(BACKUP_REMINDER_KEY)?.toBooleanStrictOrNull() ?: true,
             lastBackupAt = dao.getValue(LAST_BACKUP_AT_KEY)?.toLongOrNull() ?: 0L,
+            themeMode = dao.getValue(SettingsKeys.THEME_MODE) ?: "system",
+            language = dao.getValue(SettingsKeys.LANGUAGE) ?: "en",
+            phoneNotify = PHONE_NOTIFY_TYPES.associateWith { type ->
+                dao.getValue(Notifier.phoneNotifyKey(type))?.toBooleanStrictOrNull()
+                    ?: Notifier.showsOnPhone(type)
+            },
+            unlockConfigured = dao.getValue(SettingsKeys.UNLOCK_HASH) != null,
         )
     }
 
@@ -172,5 +228,15 @@ class SettingsUiController(
          */
         const val BACKUP_REMINDER_KEY = "backup_reminder_enabled"
         const val LAST_BACKUP_AT_KEY = "last_backup_at"
+
+        /** Event types the phone-policy toggles cover (specs/05 §2.2 table). */
+        val PHONE_NOTIFY_TYPES = listOf(
+            com.qiradev.cloudnest.data.entity.NotificationType.UPLOAD_DONE,
+            com.qiradev.cloudnest.data.entity.NotificationType.UPLOAD_FAILED,
+            com.qiradev.cloudnest.data.entity.NotificationType.MIRROR_FAILED,
+            com.qiradev.cloudnest.data.entity.NotificationType.QUOTA_STALE,
+            com.qiradev.cloudnest.data.entity.NotificationType.TRASH_PURGED,
+            com.qiradev.cloudnest.data.entity.NotificationType.TOKEN_EXPIRED,
+        )
     }
 }

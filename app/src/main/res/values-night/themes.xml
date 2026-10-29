@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark counterpart (specs/09 §13): the window background follows the
+         phone's dark mode; the Compose theme mirrors it in CloudNestTheme. -->
+    <style name="Theme.CloudNest" parent="android:Theme.Material.NoActionBar" />
+</resources>

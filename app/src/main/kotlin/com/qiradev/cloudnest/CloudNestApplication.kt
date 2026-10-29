@@ -27,6 +27,6 @@ class CloudNestApplication : Application(), Configuration.Provider {
         super.onCreate()
         BackgroundJobs.schedule(this)
         val notifier = Notifier(this).also { it.ensureChannels() }
-        NotificationRelay.start(AppServices.db(this), notifier, appScope)
+        NotificationRelay.start({ AppServices.db(this) }, notifier, appScope)
     }
 }

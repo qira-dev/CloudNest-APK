@@ -19,7 +19,9 @@ import com.qiradev.cloudnest.data.entity.NotificationType
 import com.qiradev.cloudnest.data.entity.Providers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -131,6 +133,9 @@ class Notifier(val context: Context) {
         )
 
         fun showsOnPhone(type: String): Boolean = type in PHONE_DEFAULT_ON
+
+        /** Settings row key for one type's "ফোনে দেখাও" toggle (specs/09 §13). */
+        fun phoneNotifyKey(type: String): String = "phone_notify_$type"
     }
 }
 
@@ -138,48 +143,84 @@ class Notifier(val context: Context) {
  * Bridges the engine's notification feed (DB rows) to the OS notification
  * shade. The engine stays Android-free — it only writes feed rows; this relay
  * (specs/05 §2) mirrors new rows onto the phone under the [Notifier] policy.
+ * The database can be swapped underneath the process (manual restore,
+ * specs/08 §4.2) — the relay rebuilds on the current singleton instead of
+ * dying with a closed instance.
  */
 object NotificationRelay {
 
-    fun start(db: CloudNestDatabase, notifier: Notifier, scope: CoroutineScope): Job {
-        val since = System.currentTimeMillis()
-        return scope.launch {
-            db.notificationDao().observeNewSince(since).collectLatest { rows ->
-                rows.forEach { row ->
-                    val payload = runCatching { JSONObject(row.payload) }.getOrNull()
-                    val file = payload?.optString("file")
-                        ?.takeIf { it.isNotBlank() && it != "null" }
-                    val provider = payload?.optString("provider")
-                        ?.takeIf { it.isNotBlank() && it != "null" }
-                        ?.let { notifier.providerLabel(it) }
-                    val text = when (row.type) {
-                        NotificationType.UPLOAD_DONE ->
-                            notifier.context.getString(R.string.notif_upload_done, file ?: "")
-                        NotificationType.UPLOAD_FAILED ->
-                            notifier.context.getString(R.string.notif_upload_failed, file ?: "")
-                        NotificationType.MIRROR_DONE ->
-                            notifier.context.getString(R.string.notif_mirror_done, file ?: "")
-                        NotificationType.MIRROR_FAILED ->
-                            notifier.context.getString(R.string.notif_mirror_failed, file ?: "")
-                        NotificationType.QUOTA_STALE ->
-                            notifier.context.getString(R.string.notif_quota_stale, provider ?: "")
-                        NotificationType.TRASH_PURGED ->
-                            notifier.context.getString(R.string.notif_trash_purged)
-                        NotificationType.TOKEN_EXPIRED ->
-                            notifier.context.getString(R.string.notif_token_expired, provider ?: "")
-                        else -> return@forEach
+    fun start(
+        dbProvider: () -> CloudNestDatabase,
+        notifier: Notifier,
+        scope: CoroutineScope,
+    ): Job = scope.launch {
+        while (isActive) {
+            try {
+                dbProvider().notificationDao().observeNewSince(System.currentTimeMillis())
+                    .collectLatest { rows ->
+                        rows.forEach { row ->
+                            relayRow(row, notifier, dbProvider)
+                        }
                     }
-                    // specs/05 §2.2: failed uploads carry a "Retry" action that
-                    // requeues the job; every other event posts plain.
-                    val retryJobId = payload?.optString("job")?.takeIf { it.isNotBlank() && it != "null" }
-                    val retry = if (row.type == NotificationType.UPLOAD_FAILED && retryJobId != null) {
-                        notifier.retryIntent(retryJobId)
-                    } else {
-                        null
-                    }
-                    notifier.postEvent(row.type, text, retry)
-                }
+            } catch (e: Exception) {
+                // Closed/replaced database — wait a beat and reopen the newest one.
+                delay(500)
             }
         }
+    }
+
+    private suspend fun relayRow(row: com.qiradev.cloudnest.data.entity.NotificationEntity, notifier: Notifier, dbProvider: () -> CloudNestDatabase) {
+        val payload = runCatching { JSONObject(row.payload) }.getOrNull()
+        val file = payload?.optString("file")
+            ?.takeIf { it.isNotBlank() && it != "null" }
+        val provider = payload?.optString("provider")
+            ?.takeIf { it.isNotBlank() && it != "null" }
+            ?.let { stringProviderLabel(notifier.context, it) }
+        val text = when (row.type) {
+            NotificationType.UPLOAD_DONE ->
+                notifier.context.getString(R.string.notif_upload_done, file ?: "")
+            NotificationType.UPLOAD_FAILED ->
+                notifier.context.getString(R.string.notif_upload_failed, file ?: "")
+            NotificationType.MIRROR_DONE ->
+                notifier.context.getString(R.string.notif_mirror_done, file ?: "")
+            NotificationType.MIRROR_FAILED ->
+                notifier.context.getString(R.string.notif_mirror_failed, file ?: "")
+            NotificationType.QUOTA_STALE ->
+                notifier.context.getString(R.string.notif_quota_stale, provider ?: "")
+            NotificationType.TRASH_PURGED ->
+                notifier.context.getString(R.string.notif_trash_purged)
+            NotificationType.TOKEN_EXPIRED ->
+                notifier.context.getString(R.string.notif_token_expired, provider ?: "")
+            else -> return
+        }
+        // specs/05 §2.2: failed uploads carry a "Retry" action that
+        // requeues the job; every other event posts plain.
+        val retryJobId = payload?.optString("job")?.takeIf { it.isNotBlank() && it != "null" }
+        val retry = if (row.type == NotificationType.UPLOAD_FAILED && retryJobId != null) {
+            notifier.retryIntent(retryJobId)
+        } else {
+            null
+        }
+        // specs/09 §13: the per-type "ফোনে দেখাও" toggle wins over the
+        // spec default when the user has set one.
+        val stored = runCatching {
+            dbProvider().settingsDao().getValue(Notifier.phoneNotifyKey(row.type))
+        }.getOrNull()
+        val allowed = when (stored) {
+            "true" -> true
+            "false" -> false
+            else -> Notifier.showsOnPhone(row.type)
+        }
+        if (allowed) notifier.postEvent(row.type, text, retry)
+    }
+
+    /** Localized provider name without needing a Notifier instance method. */
+    private fun stringProviderLabel(context: android.content.Context, provider: String): String = when (provider) {
+        "google_drive" -> context.getString(R.string.provider_google_drive)
+        "dropbox" -> context.getString(R.string.provider_dropbox)
+        "onedrive" -> context.getString(R.string.provider_onedrive)
+        "pcloud" -> context.getString(R.string.provider_pcloud)
+        "mega" -> context.getString(R.string.provider_mega)
+        else -> provider
     }
 }

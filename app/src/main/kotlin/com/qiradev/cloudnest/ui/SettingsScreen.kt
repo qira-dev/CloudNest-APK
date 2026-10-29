@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -53,11 +56,20 @@ val CHUNK_SIZE_OPTIONS = listOf(8, 16, 32, 64)
 /** Trash-retention choices (default 7 = one week, specs/01 §1.2). */
 val TRASH_RETENTION_OPTIONS = listOf(1, 7, 14, 30)
 
+/** Routing strategies (specs/02 §3). */
+val ROUTING_OPTIONS = listOf("capacity_aware" to R.string.routing_capacity_aware, "balanced" to R.string.routing_balanced)
+
+/** Theme modes (specs/09 §13). */
+val THEME_OPTIONS = listOf(
+    "system" to R.string.theme_system,
+    "light" to R.string.theme_light,
+    "dark" to R.string.theme_dark,
+)
+
 /**
- * Settings screen (specs/09 §13; step-8 scope: upload/storage policy + backup).
- * Wi-Fi-only, chunk size, mirroring and trash retention write through the
- * controller (each audited); backup export/import run the specs/08 §4 flow
- * with its confirmation dialogs.
+ * Settings screen (specs/09 §13): upload/storage policy, backup, language,
+ * theme and the per-type phone-notification toggles — every change audited.
+ * The visual template stands in for the owner's screenshots (specs/09).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,11 +80,16 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onWifiOnly: (Boolean) -> Unit,
     onChunkSize: (Int) -> Unit,
+    onRouting: (String) -> Unit,
     onMirror: (Boolean) -> Unit,
     onTrashRetention: (Int) -> Unit,
     onBackupReminder: (Boolean) -> Unit,
     onExport: (Uri) -> Unit,
     onImport: (Uri) -> Unit,
+    onTheme: (String) -> Unit,
+    onLanguage: (String) -> Unit,
+    onPhoneNotify: (String, Boolean) -> Unit,
+    onChangeUnlock: (String, String) -> Unit,
     onClearEvent: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -82,6 +99,10 @@ fun SettingsScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showChunkDialog by remember { mutableStateOf(false) }
     var showRetentionDialog by remember { mutableStateOf(false) }
+    var showRoutingDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    var showUnlockDialog by remember { mutableStateOf(false) }
     var restoreDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(event) {
@@ -95,7 +116,11 @@ fun SettingsScreen(
                 val invalid = event.reason.startsWith("invalid backup: ")
                 snackbar.showSnackbar(
                     context.getString(
-                        if (invalid) R.string.backup_invalid else R.string.backup_failed,
+                        when {
+                            invalid -> R.string.backup_invalid
+                            reason == "wrong_password" -> R.string.unlock_wrong_password
+                            else -> R.string.backup_failed
+                        },
                         reason,
                     ),
                 )
@@ -103,6 +128,10 @@ fun SettingsScreen(
             }
             BackupUiEvent.RestoreDone -> {
                 restoreDone = true
+                onClearEvent()
+            }
+            BackupUiEvent.UnlockChanged -> {
+                snackbar.showSnackbar(context.getString(R.string.unlock_changed))
                 onClearEvent()
             }
             null -> {}
@@ -169,6 +198,13 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .clickable { showChunkDialog = true },
             )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setting_routing)) },
+                supportingContent = { Text(stringResource(routingLabelRes(state.routingStrategy))) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showRoutingDialog = true },
+            )
             SwitchRow(
                 title = stringResource(R.string.setting_mirror),
                 subtitle = stringResource(R.string.setting_mirror_hint),
@@ -215,6 +251,46 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showImportDialog = true },
+            )
+            HorizontalDivider()
+
+            SettingsGroupTitle(stringResource(R.string.group_security))
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setting_change_unlock)) },
+                supportingContent = { Text(stringResource(R.string.setting_change_unlock_hint)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = state.unlockConfigured) { showUnlockDialog = true },
+            )
+            HorizontalDivider()
+
+            SettingsGroupTitle(stringResource(R.string.group_notifications))
+            state.phoneNotify.forEach { (type, enabled) ->
+                SwitchRow(
+                    title = stringResource(phoneNotifyLabelRes(type)),
+                    subtitle = null,
+                    checked = enabled,
+                    onChecked = { onPhoneNotify(type, it) },
+                )
+            }
+            HorizontalDivider()
+
+            SettingsGroupTitle(stringResource(R.string.group_language_theme))
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setting_language)) },
+                supportingContent = {
+                    Text(AppLocales.OFFERED.firstOrNull { it.first == state.language }?.second ?: "English")
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showLanguageDialog = true },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.setting_theme)) },
+                supportingContent = { Text(stringResource(themeLabelRes(state.themeMode))) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showThemeDialog = true },
             )
         }
     }
@@ -287,6 +363,79 @@ fun SettingsScreen(
         )
     }
 
+    if (showRoutingDialog) {
+        RadioDialog(
+            title = stringResource(R.string.setting_routing),
+            options = ROUTING_OPTIONS.map { stringResource(it.second) },
+            selectedIndex = ROUTING_OPTIONS.indexOfFirst { it.first == state.routingStrategy },
+            onSelect = { index ->
+                showRoutingDialog = false
+                onRouting(ROUTING_OPTIONS[index].first)
+            },
+            onDismiss = { showRoutingDialog = false },
+        )
+    }
+
+    if (showThemeDialog) {
+        RadioDialog(
+            title = stringResource(R.string.setting_theme),
+            options = THEME_OPTIONS.map { stringResource(it.second) },
+            selectedIndex = THEME_OPTIONS.indexOfFirst { it.first == state.themeMode },
+            onSelect = { index ->
+                showThemeDialog = false
+                onTheme(THEME_OPTIONS[index].first)
+            },
+            onDismiss = { showThemeDialog = false },
+        )
+    }
+
+    if (showLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text(stringResource(R.string.setting_language)) },
+            text = {
+                Column {
+                    AppLocales.OFFERED.forEach { (tag, name) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showLanguageDialog = false
+                                    onLanguage(tag)
+                                }
+                                .padding(vertical = 8.dp),
+                        ) {
+                            androidx.compose.material3.RadioButton(
+                                selected = tag == state.language,
+                                onClick = {
+                                    showLanguageDialog = false
+                                    onLanguage(tag)
+                                },
+                            )
+                            Text(name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (showUnlockDialog) {
+        ChangeUnlockDialog(
+            onDismiss = { showUnlockDialog = false },
+            onChange = { old, new ->
+                showUnlockDialog = false
+                onChangeUnlock(old, new)
+            },
+        )
+    }
+
     if (restoreDone) {
         // The database was replaced under the running process — restart cleanly
         // so every component reopens the restored file (specs/08 §4.2 note).
@@ -304,6 +453,70 @@ fun SettingsScreen(
 }
 
 private const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
+
+fun routingLabelRes(strategy: String): Int =
+    ROUTING_OPTIONS.firstOrNull { it.first == strategy }?.second ?: R.string.routing_capacity_aware
+
+fun themeLabelRes(mode: String): Int =
+    THEME_OPTIONS.firstOrNull { it.first == mode }?.second ?: R.string.theme_system
+
+fun phoneNotifyLabelRes(type: String): Int = when (type) {
+    "upload_done" -> R.string.notify_phone_upload_done
+    "upload_failed" -> R.string.notify_phone_upload_failed
+    "mirror_failed" -> R.string.notify_phone_mirror_failed
+    "quota_stale" -> R.string.notify_phone_quota_stale
+    "trash_purged" -> R.string.notify_phone_trash_purged
+    "token_expired" -> R.string.notify_phone_token_expired
+    else -> R.string.app_name
+}
+
+/** specs/09 §13 security group: old password verified, then the new one set. */
+@Composable
+private fun ChangeUnlockDialog(onDismiss: () -> Unit, onChange: (String, String) -> Unit) {
+    var old by remember { mutableStateOf("") }
+    var new by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    val valid = old.isNotEmpty() && new.length >= 4 && new == confirm
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.setting_change_unlock)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = old,
+                    onValueChange = { old = it },
+                    label = { Text(stringResource(R.string.unlock_old_password)) },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = new,
+                    onValueChange = { new = it },
+                    label = { Text(stringResource(R.string.unlock_new_password)) },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = confirm,
+                    onValueChange = { confirm = it },
+                    label = { Text(stringResource(R.string.setup_confirm_hint)) },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onChange(old, new) }, enabled = valid) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
 
 /** Relaunches the app task and ends the current process (restore-restart). */
 fun restartApp(context: android.content.Context) {
@@ -330,13 +543,20 @@ private fun SwitchRow(
     checked: Boolean,
     onChecked: (Boolean) -> Unit,
 ) {
-    val switchLabel = title
+    // The whole row toggles (bigger touch target); the trailing Switch renders
+    // the state — its own handler folds into the row's toggleable action.
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
-        modifier = Modifier.semantics { contentDescription = switchLabel },
+        modifier = Modifier
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onChecked,
+            )
+            .semantics { contentDescription = title },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onChecked)
+            Switch(checked = checked, onCheckedChange = null)
         },
     )
 }

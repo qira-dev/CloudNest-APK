@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- specs/09 §13 ships the 9-language STRUCTURE: full English default + full
+     Bengali, with 7 intentionally partial locale skeletons (missing strings
+     fall back to English at runtime). MissingTranslation is ignored until the
+     remaining translations are filled in. -->
+<lint>
+    <issue id="MissingTranslation" severity="ignore" />
+</lint>

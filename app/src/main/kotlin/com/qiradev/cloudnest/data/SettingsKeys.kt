@@ -17,6 +17,9 @@ object SettingsKeys {
     const val TRASH_RETENTION_DAYS = "trash_retention_days"
     const val ADMOB_CONSENT_GIVEN_AT = "admob_consent_given_at"
 
+    /** Routing strategy (specs/02 §3, specs/09 §13): `capacity_aware` | `balanced`. */
+    const val ROUTING_STRATEGY = "routing_strategy"
+
     /** Battery-exemption explainer shown once (specs/05 §3.2) — no default value. */
     const val BATTERY_EXEMPTION_ASKED = "battery_exemption_asked"
 
@@ -26,5 +29,6 @@ object SettingsKeys {
         const val RESERVE_PER_ACCOUNT_BYTES = "0"
         const val SAFETY_MARGIN_BYTES = "0"
         const val TRASH_RETENTION_DAYS = "7"
+        const val ROUTING_STRATEGY = "capacity_aware"
     }
 }

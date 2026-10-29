@@ -34,6 +34,10 @@ object DatabaseProvider {
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addMigrations(*CloudNestDatabase.MIGRATIONS)
             .addCallback(CloudNestDatabase.CALLBACK)
+            // MainActivity.attachBaseContext reads the saved language before any
+            // coroutine scope exists — a single indexed settings row on the
+            // main thread; every other access stays off the main thread.
+            .allowMainThreadQueries()
             .build()
     }
 

@@ -139,4 +139,93 @@
     <string name="backup_restore_done">Archive restored — accounts need to sign in again. Restarting…</string>
     <string name="backup_failed">Backup failed: %1$s</string>
     <string name="backup_invalid">Not a valid CloudNest backup: %1$s</string>
+
+    <!-- Setup + unlock (specs/09 screens 1–2, specs/08 §2). -->
+    <string name="setup_title">Welcome to CloudNest</string>
+    <string name="setup_body">Choose an unlock password for your archive. It is stored only as a hash — nobody can read it back.</string>
+    <string name="setup_password_hint">Unlock password</string>
+    <string name="setup_confirm_hint">Repeat the password</string>
+    <string name="setup_set_unlock">Set unlock</string>
+    <string name="setup_error_empty">The password must not be empty</string>
+    <string name="setup_error_mismatch">The two passwords do not match</string>
+    <string name="setup_restore_lead">Moving to a new phone? Restore an archive backup instead:</string>
+    <string name="unlock_title">Unlock your archive</string>
+    <string name="unlock_action">Unlock</string>
+    <string name="unlock_wrong_password">Wrong password</string>
+    <string name="unlock_locked_out">Too many attempts — wait %1$d s</string>
+    <string name="unlock_changed">Unlock password changed</string>
+    <string name="unlock_old_password">Current password</string>
+    <string name="unlock_new_password">New password</string>
+
+    <!-- Accounts (specs/09 screen 9). -->
+    <string name="screen_accounts">Accounts</string>
+    <string name="cd_connect_account">Connect a new account</string>
+    <string name="cd_open_accounts">Open accounts</string>
+    <string name="cd_refresh_quota">Refresh quota</string>
+    <string name="cd_rename_account">Rename account</string>
+    <string name="label_needs_login">Sign-in required</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="dialog_disconnect_title">Disconnect this account?</string>
+    <string name="dialog_disconnect_text">The stored tokens are removed. Chunks already in this account stay in the cloud, but files relying on them can no longer be downloaded.</string>
+    <string name="dialog_rename_title">Rename account</string>
+    <string name="dialog_rename_hint">Account label</string>
+    <string name="action_save">Save</string>
+
+    <!-- Connect wizard (specs/09 screen 10, specs/04 §2). -->
+    <string name="screen_connect">Connect an account</string>
+    <string name="connect_intro">Connect a cloud account to store archive chunks in it. The sign-in happens on the provider\'s own page and comes straight back to the app.</string>
+    <string name="connect_provider_ready">Available — continue in the browser</string>
+    <string name="connect_provider_coming">Not yet available in this build</string>
+    <string name="connect_opening">Opening sign-in…</string>
+    <string name="connect_not_configured">Sign-in is not configured yet — the provider app registration (OAuth client) is still pending. It will work once the owner completes the registration.</string>
+    <string name="connect_no_browser">No browser found to open the sign-in page</string>
+
+    <!-- Notifications feed (specs/09 screen 12). -->
+    <string name="screen_notifications">Notifications</string>
+    <string name="cd_open_notifications">Open notifications</string>
+    <string name="label_notifications_empty">Nothing here yet</string>
+    <string name="label_unread">new</string>
+    <string name="notif_upload_done_plain">Upload finished</string>
+    <string name="notif_upload_failed_plain">Upload failed</string>
+    <string name="notif_mirror_done_plain">Mirror copy completed</string>
+    <string name="notif_mirror_failed_plain">Mirror copy failed</string>
+    <string name="notif_quota_stale_plain">Quota info is out of date</string>
+    <string name="notif_token_expired_plain">Sign-in required</string>
+
+    <!-- Transfer queue (specs/09 screen 7). -->
+    <string name="screen_queue">Transfers</string>
+    <string name="cd_open_queue">Open transfers</string>
+    <string name="queue_summary">%1$d queued · %2$d running</string>
+    <string name="queue_wifi_only_on">Wi-Fi only</string>
+    <string name="queue_empty">No transfers yet</string>
+    <string name="queue_pause">Pause</string>
+    <string name="queue_resume">Resume</string>
+
+    <!-- Download / export (specs/09 screen 8, specs/03 §4). -->
+    <string name="action_download_open">Download (open/share)</string>
+    <string name="action_download_save">Download (save as…)</string>
+    <string name="download_running">Downloading…</string>
+    <string name="download_failed">Download failed: %1$s</string>
+    <string name="action_share_export">Share the downloaded file</string>
+
+    <!-- Settings — step-9 groups (specs/09 §13). -->
+    <string name="setting_routing">Routing</string>
+    <string name="routing_capacity_aware">Fill the account with the most space first</string>
+    <string name="routing_balanced">Spread chunks evenly across accounts</string>
+    <string name="group_security">Security</string>
+    <string name="setting_change_unlock">Change unlock password</string>
+    <string name="setting_change_unlock_hint">The current password is asked first</string>
+    <string name="group_notifications">Notifications</string>
+    <string name="notify_phone_upload_done">Show finished uploads on the phone</string>
+    <string name="notify_phone_upload_failed">Show failed uploads on the phone</string>
+    <string name="notify_phone_mirror_failed">Show failed mirror copies on the phone</string>
+    <string name="notify_phone_quota_stale">Show out-of-date quota warnings on the phone</string>
+    <string name="notify_phone_trash_purged">Show trash purges on the phone</string>
+    <string name="notify_phone_token_expired">Show sign-in requests on the phone</string>
+    <string name="group_language_theme">Language &amp; theme</string>
+    <string name="setting_language">Language</string>
+    <string name="setting_theme">Theme</string>
+    <string name="theme_system">Follow the phone setting</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
 </resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Language skeleton (specs/09 §13): the full translation lands with the
+     language pass; missing strings fall back to the English default. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="app_name">CloudNest</string>
+    <string name="screen_archive">アーカイブ</string>
+    <string name="screen_trash">ゴミ箱</string>
+    <string name="screen_settings">設定</string>
+    <string name="screen_accounts">アカウント</string>
+    <string name="screen_notifications">通知</string>
+    <string name="screen_queue">転送</string>
+</resources>

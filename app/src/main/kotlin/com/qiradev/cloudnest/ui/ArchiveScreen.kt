@@ -25,14 +25,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -99,10 +104,14 @@ fun formatBytes(bytes: Long): String {
 fun ArchiveScreen(
     state: FolderUiState,
     accountHealth: List<AccountHealthUi>,
+    unreadCount: Int,
     onOpenFolder: (String) -> Unit,
     onOpenRoot: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAccounts: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenQueue: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onCreateFolder: (String) -> Unit,
     onTrashFolder: (String) -> Unit,
@@ -119,6 +128,9 @@ fun ArchiveScreen(
     val createFolderLabel = stringResource(R.string.cd_create_folder)
     val openTrashLabel = stringResource(R.string.cd_open_trash)
     val openSettingsLabel = stringResource(R.string.cd_open_settings)
+    val openAccountsLabel = stringResource(R.string.cd_open_accounts)
+    val openNotificationsLabel = stringResource(R.string.cd_open_notifications)
+    val openQueueLabel = stringResource(R.string.cd_open_queue)
     val uploadLabel = stringResource(R.string.cd_upload_fab)
 
     val pickFiles = rememberLauncherForActivityResult(
@@ -174,6 +186,30 @@ fun ArchiveScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = onOpenQueue,
+                        modifier = Modifier.semantics { contentDescription = openQueueLabel },
+                    ) {
+                        Icon(Icons.Filled.CloudUpload, contentDescription = null)
+                    }
+                    IconButton(
+                        onClick = onOpenAccounts,
+                        modifier = Modifier.semantics { contentDescription = openAccountsLabel },
+                    ) {
+                        Icon(Icons.Filled.Person, contentDescription = null)
+                    }
+                    IconButton(
+                        onClick = onOpenNotifications,
+                        modifier = Modifier.semantics { contentDescription = openNotificationsLabel },
+                    ) {
+                        BadgedBox(badge = {
+                            if (unreadCount > 0) {
+                                Badge { Text(unreadCount.toString()) }
+                            }
+                        }) {
+                            Icon(Icons.Filled.Notifications, contentDescription = null)
+                        }
+                    }
                     IconButton(
                         onClick = { showNewFolderDialog = true },
                         modifier = Modifier.semantics { contentDescription = createFolderLabel },

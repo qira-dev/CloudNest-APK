@@ -7,6 +7,7 @@ import com.qiradev.cloudnest.data.CloudNestDatabase
 import com.qiradev.cloudnest.data.SettingsKeys
 import com.qiradev.cloudnest.engine.upload.ChunkMath
 import com.qiradev.cloudnest.engine.upload.NetworkGate
+import com.qiradev.cloudnest.engine.upload.RoutingStrategy
 import com.qiradev.cloudnest.engine.upload.UploadSettings
 
 /**
@@ -25,6 +26,9 @@ object EngineSettings {
                 ?: ChunkMath.DEFAULT_CHUNK_SIZE_MIB,
             reservePerAccountBytes = dao.getValue(SettingsKeys.RESERVE_PER_ACCOUNT_BYTES)?.toLongOrNull() ?: 0L,
             safetyMarginBytes = dao.getValue(SettingsKeys.SAFETY_MARGIN_BYTES)?.toLongOrNull() ?: 0L,
+            strategy = dao.getValue(SettingsKeys.ROUTING_STRATEGY)
+                ?.takeIf { it == RoutingStrategy.CAPACITY_AWARE || it == RoutingStrategy.BALANCED }
+                ?: RoutingStrategy.CAPACITY_AWARE,
             mirrorEnabled = dao.getValue(SettingsKeys.MIRROR_ENABLED)?.toBooleanStrictOrNull() ?: true,
         )
     }
@@ -32,6 +36,14 @@ object EngineSettings {
     suspend fun wifiOnlyUpload(db: CloudNestDatabase): Boolean =
         db.settingsDao().getValue(SettingsKeys.WIFI_ONLY_UPLOAD)
             ?.toBooleanStrictOrNull() ?: true
+
+    /** specs/09 §13 theme policy: `system` (follow the phone) | `light` | `dark`. */
+    suspend fun themeMode(db: CloudNestDatabase): String =
+        db.settingsDao().getValue(SettingsKeys.THEME_MODE) ?: THEME_SYSTEM
+
+    const val THEME_SYSTEM = "system"
+    const val THEME_LIGHT = "light"
+    const val THEME_DARK = "dark"
 }
 
 /**
