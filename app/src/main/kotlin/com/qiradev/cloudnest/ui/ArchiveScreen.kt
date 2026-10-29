@@ -1,5 +1,12 @@
 package com.qiradev.cloudnest.ui
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -15,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -26,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,19 +49,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.qiradev.cloudnest.AppServices
 import com.qiradev.cloudnest.R
+import com.qiradev.cloudnest.background.ShareUploads
+import com.qiradev.cloudnest.background.UploadForegroundService
+import com.qiradev.cloudnest.data.SettingsKeys
 import com.qiradev.cloudnest.data.entity.FileEntity
 import com.qiradev.cloudnest.data.entity.FolderEntity
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** Human-readable byte size — archive rows are metadata-only (specs/01 §0). */
 fun formatBytes(bytes: Long): String {
@@ -69,8 +86,9 @@ fun formatBytes(bytes: Long): String {
 
 /**
  * Archive browse screen (specs/09 screens 3+4): folder tree with breadcrumbs,
- * every state (loading/error/empty/content), long-press trash action. The upload
- * FAB arrives with the SAF picker wiring (step 7).
+ * every state (loading/error/empty/content), long-press trash action, and the
+ * upload FAB wired to the SAF picker (specs/05 §5) — notification permission
+ * (§3.1) and the one-time battery-exemption explainer (§3.2) come first.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,9 +103,54 @@ fun ArchiveScreen(
     onOpenFile: (String) -> Unit,
     onRetry: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val db = remember { AppServices.db(context) }
+    val uploadService = remember { AppServices.uploadService(db) }
+
     var showNewFolderDialog by remember { mutableStateOf(false) }
+    var showBatteryDialog by remember { mutableStateOf(false) }
     val createFolderLabel = stringResource(R.string.cd_create_folder)
     val openTrashLabel = stringResource(R.string.cd_open_trash)
+    val uploadLabel = stringResource(R.string.cd_upload_fab)
+
+    val pickFiles = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val rootId = AppServices.archiveService(db).ensureRootFolder().id
+            ShareUploads.enqueueFromSafUris(context, db, uploadService, uris, rootId)
+            UploadForegroundService.start(context)
+        }
+    }
+
+    val continueAfterPermission: () -> Unit = {
+        scope.launch {
+            val batteryAsked = db.settingsDao().getValue(SettingsKeys.BATTERY_EXEMPTION_ASKED) != null
+            if (batteryAsked) {
+                pickFiles.launch(arrayOf("*/*"))
+            } else {
+                showBatteryDialog = true
+            }
+        }
+    }
+
+    val requestNotificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { continueAfterPermission() }
+
+    val beginUpload: () -> Unit = {
+        // specs/05 §3.1: asked once before the first upload; a refusal keeps the app working.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            continueAfterPermission()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -116,6 +179,14 @@ fun ArchiveScreen(
                     }
                 },
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = beginUpload,
+                modifier = Modifier.semantics { contentDescription = uploadLabel },
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+            }
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -161,6 +232,56 @@ fun ArchiveScreen(
             onCreate = { name ->
                 showNewFolderDialog = false
                 onCreateFolder(name)
+            },
+        )
+    }
+
+    if (showBatteryDialog) {
+        // specs/05 §3.2 — explained once; refusing still uploads (revive catches pauses).
+        AlertDialog(
+            onDismissRequest = {
+                showBatteryDialog = false
+                pickFiles.launch(arrayOf("*/*"))
+            },
+            title = { Text(stringResource(R.string.dialog_battery_title)) },
+            text = { Text(stringResource(R.string.dialog_battery_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            db.settingsDao().upsert(
+                                com.qiradev.cloudnest.data.entity.SettingsEntity(
+                                    SettingsKeys.BATTERY_EXEMPTION_ASKED,
+                                    "1",
+                                ),
+                            )
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                        .setData(Uri.parse("package:${context.packageName}")),
+                                )
+                            }
+                        }
+                        showBatteryDialog = false
+                        pickFiles.launch(arrayOf("*/*"))
+                    },
+                ) { Text(stringResource(R.string.action_continue)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            db.settingsDao().upsert(
+                                com.qiradev.cloudnest.data.entity.SettingsEntity(
+                                    SettingsKeys.BATTERY_EXEMPTION_ASKED,
+                                    "1",
+                                ),
+                            )
+                        }
+                        showBatteryDialog = false
+                        pickFiles.launch(arrayOf("*/*"))
+                    },
+                ) { Text(stringResource(R.string.action_not_now)) }
             },
         )
     }

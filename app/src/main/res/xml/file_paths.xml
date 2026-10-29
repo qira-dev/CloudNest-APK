@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportable cache areas (specs/03 §4.1 + specs/05 §4). -->
+<paths>
+    <cache-path
+        name="exports"
+        path="exports/" />
+    <cache-path
+        name="shared_uploads"
+        path="shared-uploads/" />
+</paths>

@@ -97,6 +97,9 @@ class UploadService(
         sources[fileId] = source
     }
 
+    /** True when the transient registry still holds the source (drivers re-register after restart). */
+    fun hasSource(fileId: String): Boolean = sources.containsKey(fileId)
+
     // ---- queueing ----
 
     /** Creates the file row (planning) + a queued upload job. Duplicate names become `name (2)`. */
@@ -606,16 +609,21 @@ class UploadService(
     }
 
     private suspend fun failJob(jobId: String, errorCode: String) {
+        var fileName: String? = null
         db.transferJobDao().getById(jobId)?.let { job ->
             db.transferJobDao().update(job.copy(status = JobStatus.FAILED, errorCode = errorCode, updatedAt = clock()))
             db.reservationDao().deleteByJob(jobId)
             job.fileId?.let { fileId ->
                 db.fileDao().getById(fileId)?.let { file ->
+                    fileName = file.name
                     db.fileDao().update(file.copy(status = FileStatus.FAILED, updatedAt = clock()))
                 }
             }
         }
-        notify(NotificationType.UPLOAD_FAILED, """{"code":"$errorCode"}""")
+        // specs/05 §2.2: the failed notice carries the file name (phone/feed text)
+        // and the job id (the "Retry" notification action requeues this job).
+        val fileJson = fileName?.let { "\"${jsonEscape(it)}\"" } ?: "null"
+        notify(NotificationType.UPLOAD_FAILED, """{"file":$fileJson,"code":"$errorCode","job":"$jobId"}""")
     }
 
     private suspend fun notify(type: String, payload: String) {

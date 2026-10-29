@@ -17,6 +17,9 @@ object SettingsKeys {
     const val TRASH_RETENTION_DAYS = "trash_retention_days"
     const val ADMOB_CONSENT_GIVEN_AT = "admob_consent_given_at"
 
+    /** Battery-exemption explainer shown once (specs/05 §3.2) — no default value. */
+    const val BATTERY_EXEMPTION_ASKED = "battery_exemption_asked"
+
     object Defaults {
         const val WIFI_ONLY_UPLOAD = "true"
         const val CHUNK_SIZE_MIB = "64"

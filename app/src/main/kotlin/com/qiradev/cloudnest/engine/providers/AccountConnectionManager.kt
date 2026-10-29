@@ -134,7 +134,19 @@ class AccountConnectionManager(
             observeQuota(accountId, connectorFor(account.provider), tokens)
         } catch (e: ProviderException) {
             if (e.code != ProviderErrorCode.AUTH_EXPIRED) {
-                accountDao.update(account.copy(quotaStatus = QuotaStatus.UNKNOWN, lastUsedAt = clock()))
+                // Failed observation = the data did not get fresher. A STALE
+                // account (specs/05 §1) stays stale — it must not flip back to
+                // unknown, or the quota-stale notice would re-arm forever.
+                accountDao.update(
+                    account.copy(
+                        quotaStatus = if (account.quotaStatus == QuotaStatus.STALE) {
+                            QuotaStatus.STALE
+                        } else {
+                            QuotaStatus.UNKNOWN
+                        },
+                        lastUsedAt = clock(),
+                    ),
+                )
             } else {
                 throw e
             }

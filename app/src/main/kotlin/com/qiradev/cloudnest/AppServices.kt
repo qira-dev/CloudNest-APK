@@ -7,10 +7,12 @@ import com.qiradev.cloudnest.data.entity.Providers
 import com.qiradev.cloudnest.engine.archive.ArchiveService
 import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.mirror.MirrorService
+import com.qiradev.cloudnest.engine.providers.AccountConnectionManager
 import com.qiradev.cloudnest.engine.providers.AesGcmKeystoreCipher
 import com.qiradev.cloudnest.engine.providers.ProviderConnector
 import com.qiradev.cloudnest.engine.providers.ProviderErrorCode
 import com.qiradev.cloudnest.engine.providers.ProviderException
+import com.qiradev.cloudnest.engine.providers.OAuthStateStore
 import com.qiradev.cloudnest.engine.providers.TokenPair
 import com.qiradev.cloudnest.engine.providers.TokenStore
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConfig
@@ -54,6 +56,9 @@ object AppServices {
 
     fun archiveService(db: CloudNestDatabase): ArchiveService =
         ArchiveService(db, connectors(), tokenProvider(db, tokenStore()))
+
+    fun connectionManager(db: CloudNestDatabase): AccountConnectionManager =
+        AccountConnectionManager(db, tokenStore(), connectors(), OAuthStateStore(), health())
 
     /**
      * One health ledger per process (specs/06 §2.1) — memory state, replayed

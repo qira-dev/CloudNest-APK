@@ -47,4 +47,29 @@
     <string name="label_mirror_copy">Mirror copy on %1$s</string>
     <string name="label_verified">verified</string>
     <string name="label_no_copies">No cloud copies yet</string>
+
+    <!-- Upload (SAF picker) + background layer (specs/05). -->
+    <string name="cd_upload_fab">Upload files</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_not_now">Not now</string>
+    <string name="dialog_battery_title">Keep uploads running</string>
+    <string name="dialog_battery_body">CloudNest can keep uploading even when the screen is off. Allow CloudNest to ignore battery optimization so transfers are not interrupted. You can refuse — uploads still work, they may pause and resume later.</string>
+    <string name="channel_progress">Transfer progress</string>
+    <string name="channel_events">Archive events</string>
+    <string name="notif_uploading_title">Uploading</string>
+    <string name="notif_upload_starting">Preparing upload…</string>
+    <string name="notif_upload_progress">%1$s — %2$d%%</string>
+    <string name="notif_action_stop">Stop</string>
+    <string name="notif_upload_done">Uploaded to the archive: %1$s</string>
+    <string name="notif_upload_failed">Upload failed: %1$s</string>
+    <string name="notif_mirror_done">Mirror copy completed: %1$s</string>
+    <string name="notif_mirror_failed">Mirror copy failed: %1$s</string>
+    <string name="notif_quota_stale">Storage usage for %1$s is out of date</string>
+    <string name="notif_trash_purged">Trash purged — expired items deleted forever</string>
+    <string name="notif_token_expired">Sign-in required: %1$s</string>
+    <string name="provider_google_drive">Google Drive</string>
+    <string name="provider_dropbox">Dropbox</string>
+    <string name="provider_onedrive">OneDrive</string>
+    <string name="provider_pcloud">pCloud</string>
+    <string name="provider_mega">MEGA</string>
 </resources>

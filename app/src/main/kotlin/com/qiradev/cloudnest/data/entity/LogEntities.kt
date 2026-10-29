@@ -11,6 +11,7 @@ object NotificationType {
     const val TRASH_PURGED = "trash_purged"
     const val MIRROR_DONE = "mirror_done"
     const val MIRROR_FAILED = "mirror_failed"
+    const val TOKEN_EXPIRED = "token_expired"
 }
 
 object AuditEventType {
