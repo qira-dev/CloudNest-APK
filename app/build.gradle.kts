@@ -14,7 +14,10 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
+        // specs/07 §4: Google's PUBLISHED test application id — the owner's real
+        // AdMob app id replaces it for release (build-config override, not code).
+        manifestPlaceholders["admobApplicationId"] = "ca-app-pub-3940256099942544~3347511713"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -99,6 +102,10 @@ dependencies {
 
     // Background layer (specs/05) — WorkManager recurring jobs.
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Ads (specs/07) — Google AdMob SDK + UMP consent, test ids only for now.
+    implementation("com.google.android.gms:play-services-ads:24.0.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.2.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

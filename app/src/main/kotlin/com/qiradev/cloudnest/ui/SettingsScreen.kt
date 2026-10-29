@@ -275,6 +275,22 @@ fun SettingsScreen(
             }
             HorizontalDivider()
 
+            SettingsGroupTitle(stringResource(R.string.group_ads))
+            // specs/07 §2: the owner sees where ads sit — view only, toggles are
+            // build-time config changes.
+            com.qiradev.cloudnest.ads.AdConfig.PLACEMENTS.forEach { placement ->
+                ListItem(
+                    headlineContent = { Text(placement.id) },
+                    supportingContent = {
+                        Text(
+                            stringResource(adFormatLabel(placement.format)) +
+                                if (placement.enabled) "" else " · " + stringResource(R.string.ad_placement_disabled),
+                        )
+                    },
+                )
+            }
+            HorizontalDivider()
+
             SettingsGroupTitle(stringResource(R.string.group_language_theme))
             ListItem(
                 headlineContent = { Text(stringResource(R.string.setting_language)) },
@@ -459,6 +475,14 @@ fun routingLabelRes(strategy: String): Int =
 
 fun themeLabelRes(mode: String): Int =
     THEME_OPTIONS.firstOrNull { it.first == mode }?.second ?: R.string.theme_system
+
+fun adFormatLabel(format: com.qiradev.cloudnest.ads.AdConfig.Format): Int = when (format) {
+    com.qiradev.cloudnest.ads.AdConfig.Format.BANNER -> R.string.ad_format_banner
+    com.qiradev.cloudnest.ads.AdConfig.Format.NATIVE -> R.string.ad_format_native
+    com.qiradev.cloudnest.ads.AdConfig.Format.INTERSTITIAL -> R.string.ad_format_interstitial
+    com.qiradev.cloudnest.ads.AdConfig.Format.REWARDED -> R.string.ad_format_rewarded
+    com.qiradev.cloudnest.ads.AdConfig.Format.APP_OPEN -> R.string.ad_format_app_open
+}
 
 fun phoneNotifyLabelRes(type: String): Int = when (type) {
     "upload_done" -> R.string.notify_phone_upload_done

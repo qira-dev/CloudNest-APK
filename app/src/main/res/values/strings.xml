@@ -225,6 +225,14 @@
     <string name="group_language_theme">Language &amp; theme</string>
     <string name="setting_language">Language</string>
     <string name="setting_theme">Theme</string>
+    <string name="group_ads">Ads</string>
+    <string name="ad_format_banner">Banner</string>
+    <string name="ad_format_native">Native</string>
+    <string name="ad_format_interstitial">Interstitial</string>
+    <string name="ad_format_rewarded">Rewarded</string>
+    <string name="ad_format_app_open">App open</string>
+    <string name="ad_placement_disabled">off</string>
+    <string name="ad_label">Ad</string>
     <string name="theme_system">Follow the phone setting</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>

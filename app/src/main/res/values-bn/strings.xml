@@ -211,6 +211,14 @@
     <string name="group_language_theme">ভাষা ও থিম</string>
     <string name="setting_language">ভাষা</string>
     <string name="setting_theme">থিম</string>
+    <string name="group_ads">অ্যাড</string>
+    <string name="ad_format_banner">ব্যানার</string>
+    <string name="ad_format_native">নেটিভ</string>
+    <string name="ad_format_interstitial">ইন্টারস্টিশিয়াল</string>
+    <string name="ad_format_rewarded">রিওয়ার্ডেড</string>
+    <string name="ad_format_app_open">অ্যাপ-ওপেন</string>
+    <string name="ad_placement_disabled">বন্ধ</string>
+    <string name="ad_label">অ্যাড</string>
     <string name="theme_system">ফোনের সেটিং মানবে</string>
     <string name="theme_light">লাইট</string>
     <string name="theme_dark">ডার্ক</string>

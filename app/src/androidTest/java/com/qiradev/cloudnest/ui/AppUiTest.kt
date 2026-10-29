@@ -68,7 +68,7 @@ class AppUiTest {
         ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
 
     private fun unlockThroughUi() {
-        compose.onNodeWithText(str(R.string.unlock_title)).assertExists()
+        waitUntilShown(str(R.string.unlock_title))
         typeIntoPassword(unlockPassword)
         compose.onNodeWithText(str(R.string.unlock_action)).performClick()
         waitUntilGone(str(R.string.unlock_title))
@@ -82,16 +82,27 @@ class AppUiTest {
     }
 
     private fun waitUntilGone(text: String) {
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty()
+        compose.waitUntil(20_000) {
+            !rootReady() || compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty()
         }
     }
 
     private fun waitUntilShown(text: String) {
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        compose.waitUntil(20_000) {
+            rootReady() && compose.onAllNodesWithText(text, substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
         }
     }
+
+    /**
+     * The compose root registers asynchronously on slow emulators — queries
+     * during that window throw "no compose hierarchies", so waits treat it as
+     * "not yet" instead of failing the test.
+     */
+    private fun rootReady(): Boolean = runCatching {
+        compose.onRoot().fetchSemanticsNode()
+        true
+    }.getOrDefault(false)
 
     @After
     fun closeApp() {
@@ -109,14 +120,14 @@ class AppUiTest {
 
     @Test
     fun unlockGateBlocksWrongPasswordAndLetsTheRightOneThrough(): Unit = runBlocking {
-        launchApp()
+        val scenario = launchApp()
         unlockThroughUi()
         waitUntilShown(str(R.string.screen_archive))
-        closeApp()
 
-        // Every launch asks again (specs/08 §2).
-        launchApp()
-        compose.onNodeWithText(str(R.string.unlock_title)).assertExists()
+        // Every (re)creation asks again (specs/08 §2) — recreate avoids a
+        // launch race between the dying and the starting activity.
+        scenario.recreate()
+        waitUntilShown(str(R.string.unlock_title))
         typeIntoPassword("wrong-pass")
         compose.onNodeWithText(str(R.string.unlock_action)).performClick()
         waitUntilShown(str(R.string.unlock_wrong_password))

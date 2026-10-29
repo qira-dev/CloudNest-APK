@@ -46,7 +46,7 @@ private sealed interface AppScreen {
  * every screen and every background worker.
  */
 @Composable
-fun CloudNestApp(oauthCallback: CloudNestOAuth? = null) {
+fun CloudNestApp(oauthCallback: CloudNestOAuth? = null, onAppContentVisible: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppServices.db(context) }
@@ -58,9 +58,16 @@ fun CloudNestApp(oauthCallback: CloudNestOAuth? = null) {
     LaunchedEffect(Unit) {
         gate = if (unlock.isConfigured()) GateState.NeedsUnlock else GateState.NeedsSetup
         themeMode = loadThemeMode(db)
+        // Unlock gates never carry ads (specs/07 §3) — the app-open fires once
+        // the content is actually visible behind the gate.
+        if (gate == GateState.Ready) onAppContentVisible()
     }
 
     // OAuth redirect (specs/04 §2) — complete the connection behind the gate.
+    LaunchedEffect(gate) {
+        if (gate == GateState.Ready) onAppContentVisible()
+    }
+
     LaunchedEffect(oauthCallback) {
         val callback = oauthCallback ?: return@LaunchedEffect
         runCatching {

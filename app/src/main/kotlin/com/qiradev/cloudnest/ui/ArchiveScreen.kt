@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -132,6 +133,7 @@ fun ArchiveScreen(
     val openNotificationsLabel = stringResource(R.string.cd_open_notifications)
     val openQueueLabel = stringResource(R.string.cd_open_queue)
     val uploadLabel = stringResource(R.string.cd_upload_fab)
+    val nativeEvery = remember { com.qiradev.cloudnest.ads.AdConfig.byId("list_native")?.everyNItems ?: 12 }
 
     val pickFiles = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -239,6 +241,10 @@ fun ArchiveScreen(
                 Icon(Icons.Filled.Add, contentDescription = null)
             }
         },
+        bottomBar = {
+            // specs/07 §3: banner under the file list; zero-height until loaded.
+            com.qiradev.cloudnest.ads.AdSlot("home_bottom")
+        },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             if (accountHealth.isNotEmpty()) {
@@ -269,13 +275,18 @@ fun ArchiveScreen(
                         Centered { Text(stringResource(R.string.label_empty_folder)) }
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            items(state.folders, key = { "folder-${it.id}" }) { folder ->
+                            itemsIndexed(state.folders, key = { _, f -> "folder-${f.id}" }) { _, folder ->
                                 FolderRow(folder, onOpenFolder, onTrashFolder)
                                 HorizontalDivider()
                             }
-                            items(state.files, key = { "file-${it.id}" }) { file ->
+                            itemsIndexed(state.files, key = { _, f -> "file-${f.id}" }) { index, file ->
                                 FileRow(file, onOpenFile, onTrashFile)
                                 HorizontalDivider()
+                                // specs/07 §3: one native ad every 12 list items.
+                                if ((index + 1) % nativeEvery == 0) {
+                                    com.qiradev.cloudnest.ads.NativeAdSlotItem()
+                                    HorizontalDivider()
+                                }
                             }
                         }
                     }

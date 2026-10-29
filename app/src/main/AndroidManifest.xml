@@ -39,6 +39,12 @@
             </intent-filter>
         </activity>
 
+        <!-- AdMob app id (specs/07 §4): Google's published TEST id — the owner's
+             real id lands here for release via the manifest placeholder. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobApplicationId}" />
+
         <!-- Foreground transfer service (specs/02 §6): screen-off uploads. -->
         <service
             android:name=".background.UploadForegroundService"
