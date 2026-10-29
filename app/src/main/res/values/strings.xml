@@ -179,6 +179,7 @@
     <string name="connect_opening">Opening sign-in…</string>
     <string name="connect_not_configured">Sign-in is not configured yet — the provider app registration (OAuth client) is still pending. It will work once the owner completes the registration.</string>
     <string name="connect_no_browser">No browser found to open the sign-in page</string>
+    <string name="connect_provider_beta">Beta — planned for a later release</string>
 
     <!-- Notifications feed (specs/09 screen 12). -->
     <string name="screen_notifications">Notifications</string>

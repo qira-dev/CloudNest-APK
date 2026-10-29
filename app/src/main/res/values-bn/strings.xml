@@ -169,6 +169,7 @@
     <string name="connect_opening">লগইন পাতা খুলছে…</string>
     <string name="connect_not_configured">লগইন এখনো কনফিগার হয়নি — প্রোভাইডারের অ্যাপ-রেজিস্ট্রেশন (OAuth ক্লায়েন্ট) এখনো বাকি। রেজিস্ট্রেশন হলেই এটা কাজ করবে।</string>
     <string name="connect_no_browser">লগইন পাতা খোলার ব্রাউজার পাওয়া যায়নি</string>
+    <string name="connect_provider_beta">বিটা — পরের রিলিজে যোগ হবে</string>
 
     <string name="screen_notifications">নোটিফিকেশন</string>
     <string name="cd_open_notifications">নোটিফিকেশন খোলো</string>

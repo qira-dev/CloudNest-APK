@@ -44,11 +44,11 @@ import kotlinx.coroutines.launch
 /**
  * Connect wizard (specs/09 screen 10, specs/04 §2): provider pick → consent
  * explanation → browser sign-in → redirect back into the app (MainActivity
- * forwards `cloudnest://oauth`). SKELETON by plan: the Drive flow is fully
- * wired, but `GoogleDriveConfig.clientId` stays empty until the owner
- * registers the Android OAuth client — until then starting a connection fails
- * honestly with the "not configured" message, and the other providers show as
- * not yet available (specs/04 orders Drive first).
+ * forwards `cloudnest://oauth`). Drive, Dropbox, OneDrive and pCloud are
+ * wired (specs/04 §3.1–§3.4); client ids stay empty until the owner
+ * registers each OAuth client — starting a connection then fails honestly
+ * with the "not configured" message. MEGA is not wired (specs/04 §3.5:
+ * risk-accepted, last — open question #2).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +61,28 @@ fun ConnectWizardScreen(
     val db = remember { AppServices.db(context) }
     var connecting by rememberSaveable { mutableStateOf(false) }
     var messageRes by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    val startConnect: (String) -> Unit = { provider ->
+        connecting = true
+        messageRes = null
+        scope.launch {
+            try {
+                val url = AppServices.connectionManager(db).startConnection(provider)
+                // Hand off to the browser/external app; the provider
+                // redirects back via cloudnest://oauth (specs/04 §2).
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }.onFailure {
+                    messageRes = R.string.connect_no_browser
+                }
+            } catch (e: Exception) {
+                // Empty client id (owner registration pending) lands here.
+                messageRes = R.string.connect_not_configured
+            } finally {
+                connecting = false
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -88,34 +110,15 @@ fun ConnectWizardScreen(
             )
             Spacer(Modifier.height(16.dp))
 
-            ProviderCard(
-                provider = Providers.GOOGLE_DRIVE,
-                available = true,
-                onClick = {
-                    connecting = true
-                    messageRes = null
-                    scope.launch {
-                        try {
-                            val url = AppServices.connectionManager(db).startConnection(Providers.GOOGLE_DRIVE)
-                            // Hand off to the browser/external app; the provider
-                            // redirects back via cloudnest://oauth (specs/04 §2).
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }.onFailure {
-                                messageRes = R.string.connect_no_browser
-                            }
-                        } catch (e: Exception) {
-                            // Empty clientId (owner registration pending) lands here.
-                            messageRes = R.string.connect_not_configured
-                        } finally {
-                            connecting = false
-                        }
-                    }
-                },
-            )
-            listOf(Providers.DROPBOX, Providers.ONEDRIVE, Providers.PCLOUD, Providers.MEGA).forEach { provider ->
-                ProviderCard(provider = provider, available = false, onClick = {})
-            }
+            listOf(Providers.GOOGLE_DRIVE, Providers.DROPBOX, Providers.ONEDRIVE, Providers.PCLOUD)
+                .forEach { provider ->
+                    ProviderCard(
+                        provider = provider,
+                        available = true,
+                        onClick = { startConnect(provider) },
+                    )
+                }
+            ProviderCard(provider = Providers.MEGA, available = false, beta = true, onClick = {})
 
             if (connecting) {
                 Spacer(Modifier.height(16.dp))
@@ -134,7 +137,7 @@ fun ConnectWizardScreen(
 }
 
 @Composable
-private fun ProviderCard(provider: String, available: Boolean, onClick: () -> Unit) {
+private fun ProviderCard(provider: String, available: Boolean, beta: Boolean = false, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), onClick = onClick, enabled = available) {
         Column(Modifier.padding(16.dp)) {
             Text(
@@ -142,8 +145,13 @@ private fun ProviderCard(provider: String, available: Boolean, onClick: () -> Un
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(4.dp))
+            val statusRes = when {
+                available -> R.string.connect_provider_ready
+                beta -> R.string.connect_provider_beta
+                else -> R.string.connect_provider_coming
+            }
             Text(
-                stringResource(if (available) R.string.connect_provider_ready else R.string.connect_provider_coming),
+                stringResource(statusRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (available) {
                     MaterialTheme.colorScheme.primary

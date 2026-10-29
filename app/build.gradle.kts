@@ -112,6 +112,8 @@ dependencies {
     testImplementation("androidx.test:core-ktx:1.6.1")
     testImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("androidx.work:work-testing:2.10.0")
+    // Real-protocol fixtures for the connector HTTP layer (specs/04 §6 tests).
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     // Compose UI tests (specs/09 test, specs/10 UiTest) — the BOM must be
     // applied to androidTest too, implementation(platform) does not carry over.
     androidTestImplementation(composeBom)

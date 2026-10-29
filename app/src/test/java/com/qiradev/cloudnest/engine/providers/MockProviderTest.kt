@@ -57,7 +57,7 @@ class MockProviderTest {
     }
 
     @Test
-    fun stateIsSingleUseAndExpiresInTwoMinutes() {
+    fun stateIsSingleUseAndExpiresInTwoMinutes(): Unit = runBlocking {
         val state = stateStore.newOauthState("google_drive")
         assertEquals("google_drive", stateStore.validateAndConsume(state))
         assertNull(stateStore.validateAndConsume(state))

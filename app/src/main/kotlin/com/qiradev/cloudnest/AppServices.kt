@@ -19,6 +19,12 @@ import com.qiradev.cloudnest.engine.providers.TokenPair
 import com.qiradev.cloudnest.engine.providers.TokenStore
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConfig
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConnector
+import com.qiradev.cloudnest.engine.providers.dropbox.DropboxConfig
+import com.qiradev.cloudnest.engine.providers.dropbox.DropboxConnector
+import com.qiradev.cloudnest.engine.providers.onedrive.OneDriveConfig
+import com.qiradev.cloudnest.engine.providers.onedrive.OneDriveConnector
+import com.qiradev.cloudnest.engine.providers.pcloud.PCloudConfig
+import com.qiradev.cloudnest.engine.providers.pcloud.PCloudConnector
 import com.qiradev.cloudnest.engine.settings.EngineSettings
 import com.qiradev.cloudnest.engine.settings.WifiOnlyNetworkGate
 import com.qiradev.cloudnest.engine.upload.TokenProvider
@@ -39,11 +45,40 @@ object AppServices {
 
     fun db(context: Context): CloudNestDatabase = DatabaseProvider.get(context)
 
-    fun connectors(): Map<String, ProviderConnector> = mapOf(
-        Providers.GOOGLE_DRIVE to GoogleDriveConnector(
-            GoogleDriveConfig(clientId = "", redirectUri = OAUTH_REDIRECT_URI),
-        ),
-    )
+    /**
+     * OAuth flow store (states + PKCE verifiers) backed by the meta table —
+     * instance-churn-safe, so a redirect completed by a later composition
+     * finds the state the earlier composition minted (specs/04 §2).
+     */
+    fun oauthFlowStore(db: CloudNestDatabase?): OAuthStateStore = OAuthStateStore(db)
+
+    /**
+     * One connector per supported provider (specs/04 §3.1–§3.4). Client ids
+     * stay empty until the owner registers each OAuth client — connect flows
+     * fail honestly until then; engine work that only needs already-connected
+     * accounts keeps running. MEGA is not wired (specs/04 §3.5: risk-accepted,
+     * last — open question #2).
+     */
+    fun connectors(db: CloudNestDatabase? = null): Map<String, ProviderConnector> {
+        val flowStore = oauthFlowStore(db)
+        return mapOf(
+            Providers.GOOGLE_DRIVE to GoogleDriveConnector(
+                GoogleDriveConfig(clientId = "", redirectUri = OAUTH_REDIRECT_URI),
+            ),
+            Providers.DROPBOX to DropboxConnector(
+                DropboxConfig(clientId = "", redirectUri = OAUTH_REDIRECT_URI),
+                flowStore = flowStore,
+            ),
+            Providers.ONEDRIVE to OneDriveConnector(
+                OneDriveConfig(clientId = "", redirectUri = OAUTH_REDIRECT_URI),
+                flowStore = flowStore,
+            ),
+            Providers.PCLOUD to PCloudConnector(
+                PCloudConfig(clientId = "", redirectUri = OAUTH_REDIRECT_URI),
+                flowStore = flowStore,
+            ),
+        )
+    }
 
     fun tokenStore(): TokenStore = TokenStore(AesGcmKeystoreCipher())
 
@@ -59,10 +94,10 @@ object AppServices {
         }
 
     fun archiveService(db: CloudNestDatabase): ArchiveService =
-        ArchiveService(db, connectors(), tokenProvider(db, tokenStore()))
+        ArchiveService(db, connectors(db), tokenProvider(db, tokenStore()))
 
     fun connectionManager(db: CloudNestDatabase): AccountConnectionManager =
-        AccountConnectionManager(db, tokenStore(), connectors(), OAuthStateStore(), health())
+        AccountConnectionManager(db, tokenStore(), connectors(db), oauthFlowStore(db), health())
 
     fun diagnosticsService(db: CloudNestDatabase): DiagnosticsService =
         DiagnosticsService(db, health(), connectionManager(db))
@@ -80,13 +115,13 @@ object AppServices {
         }
 
     fun mirrorService(db: CloudNestDatabase): MirrorService =
-        MirrorService(db, connectors(), tokenProvider(db, tokenStore()), health())
+        MirrorService(db, connectors(db), tokenProvider(db, tokenStore()), health())
 
     fun downloadService(db: CloudNestDatabase): DownloadService =
-        DownloadService(db, connectors(), tokenProvider(db, tokenStore()), health = health())
+        DownloadService(db, connectors(db), tokenProvider(db, tokenStore()), health = health())
 
     fun uploadService(db: CloudNestDatabase): UploadService =
-        UploadService(db, connectors(), tokenProvider(db, tokenStore()), health = health())
+        UploadService(db, connectors(db), tokenProvider(db, tokenStore()), health = health())
 
     /**
      * Settings-aware production services (specs/01 §1.2 + specs/02 §1/§5): the
@@ -101,13 +136,13 @@ object AppServices {
         val gate = WifiOnlyNetworkGate.fromContext(context, EngineSettings.wifiOnlyUpload(db))
         val upload = UploadService(
             db,
-            connectors(),
+            connectors(db),
             tokenProvider(db, tokenStore()),
             networkGate = gate,
             settings = EngineSettings.loadUploadSettings(db),
             health = health(),
         )
-        val mirror = MirrorService(db, connectors(), tokenProvider(db, tokenStore()), health(), networkGate = gate)
+        val mirror = MirrorService(db, connectors(db), tokenProvider(db, tokenStore()), health(), networkGate = gate)
         return upload to mirror
     }
 }
