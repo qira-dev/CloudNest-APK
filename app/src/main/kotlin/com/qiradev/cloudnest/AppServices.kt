@@ -5,6 +5,7 @@ import com.qiradev.cloudnest.data.CloudNestDatabase
 import com.qiradev.cloudnest.data.DatabaseProvider
 import com.qiradev.cloudnest.data.entity.Providers
 import com.qiradev.cloudnest.engine.archive.ArchiveService
+import com.qiradev.cloudnest.engine.diagnostics.DiagnosticsService
 import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.mirror.MirrorService
 import com.qiradev.cloudnest.engine.providers.AccountConnectionManager
@@ -17,6 +18,8 @@ import com.qiradev.cloudnest.engine.providers.TokenPair
 import com.qiradev.cloudnest.engine.providers.TokenStore
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConfig
 import com.qiradev.cloudnest.engine.providers.google.GoogleDriveConnector
+import com.qiradev.cloudnest.engine.settings.EngineSettings
+import com.qiradev.cloudnest.engine.settings.WifiOnlyNetworkGate
 import com.qiradev.cloudnest.engine.upload.TokenProvider
 import com.qiradev.cloudnest.engine.upload.UploadService
 
@@ -60,6 +63,9 @@ object AppServices {
     fun connectionManager(db: CloudNestDatabase): AccountConnectionManager =
         AccountConnectionManager(db, tokenStore(), connectors(), OAuthStateStore(), health())
 
+    fun diagnosticsService(db: CloudNestDatabase): DiagnosticsService =
+        DiagnosticsService(db, health(), connectionManager(db))
+
     /**
      * One health ledger per process (specs/06 §2.1) — memory state, replayed
      * from upload_attempts at startup by the background layer (specs/05).
@@ -77,4 +83,27 @@ object AppServices {
 
     fun uploadService(db: CloudNestDatabase): UploadService =
         UploadService(db, connectors(), tokenProvider(db, tokenStore()), health = health())
+
+    /**
+     * Settings-aware production services (specs/01 §1.2 + specs/02 §1/§5): the
+     * stored chunk size, mirroring toggle and Wi-Fi-only policy actually reach
+     * the engines. Transfer drivers (foreground service, revive worker) build
+     * these per drain so a settings change applies to the next run.
+     */
+    suspend fun liveTransferServices(
+        context: Context,
+        db: CloudNestDatabase,
+    ): Pair<UploadService, MirrorService> {
+        val gate = WifiOnlyNetworkGate.fromContext(context, EngineSettings.wifiOnlyUpload(db))
+        val upload = UploadService(
+            db,
+            connectors(),
+            tokenProvider(db, tokenStore()),
+            networkGate = gate,
+            settings = EngineSettings.loadUploadSettings(db),
+            health = health(),
+        )
+        val mirror = MirrorService(db, connectors(), tokenProvider(db, tokenStore()), health(), networkGate = gate)
+        return upload to mirror
+    }
 }

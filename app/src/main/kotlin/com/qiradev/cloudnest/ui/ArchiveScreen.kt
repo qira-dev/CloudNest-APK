@@ -8,6 +8,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.RestoreFromTrash
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -86,17 +89,21 @@ fun formatBytes(bytes: Long): String {
 
 /**
  * Archive browse screen (specs/09 screens 3+4): folder tree with breadcrumbs,
- * every state (loading/error/empty/content), long-press trash action, and the
- * upload FAB wired to the SAF picker (specs/05 §5) — notification permission
- * (§3.1) and the one-time battery-exemption explainer (§3.2) come first.
+ * every state (loading/error/empty/content), long-press trash action, the
+ * per-account health strip (specs/06 §2.3) and the upload FAB wired to the SAF
+ * picker (specs/05 §5) — notification permission (§3.1) and the one-time
+ * battery-exemption explainer (§3.2) come first.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArchiveScreen(
     state: FolderUiState,
+    accountHealth: List<AccountHealthUi>,
     onOpenFolder: (String) -> Unit,
     onOpenRoot: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     onCreateFolder: (String) -> Unit,
     onTrashFolder: (String) -> Unit,
     onTrashFile: (String) -> Unit,
@@ -106,12 +113,12 @@ fun ArchiveScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppServices.db(context) }
-    val uploadService = remember { AppServices.uploadService(db) }
 
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showBatteryDialog by remember { mutableStateOf(false) }
     val createFolderLabel = stringResource(R.string.cd_create_folder)
     val openTrashLabel = stringResource(R.string.cd_open_trash)
+    val openSettingsLabel = stringResource(R.string.cd_open_settings)
     val uploadLabel = stringResource(R.string.cd_upload_fab)
 
     val pickFiles = rememberLauncherForActivityResult(
@@ -120,7 +127,9 @@ fun ArchiveScreen(
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             val rootId = AppServices.archiveService(db).ensureRootFolder().id
-            ShareUploads.enqueueFromSafUris(context, db, uploadService, uris, rootId)
+            // Settings-aware enqueue: the stored chunk size lands on the file row.
+            val (upload, _) = AppServices.liveTransferServices(context, db)
+            ShareUploads.enqueueFromSafUris(context, db, upload, uris, rootId)
             UploadForegroundService.start(context)
         }
     }
@@ -177,6 +186,12 @@ fun ArchiveScreen(
                     ) {
                         Icon(Icons.Filled.DeleteOutline, contentDescription = null)
                     }
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.semantics { contentDescription = openSettingsLabel },
+                    ) {
+                        Icon(Icons.Filled.Settings, contentDescription = null)
+                    }
                 },
             )
         },
@@ -190,6 +205,13 @@ fun ArchiveScreen(
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            if (accountHealth.isNotEmpty()) {
+                AccountHealthStrip(
+                    accounts = accountHealth,
+                    onOpenDiagnostics = onOpenDiagnostics,
+                )
+                HorizontalDivider()
+            }
             if (state is FolderUiState.Ready) {
                 BreadcrumbsRow(
                     crumbs = state.breadcrumbs,
@@ -284,6 +306,41 @@ fun ArchiveScreen(
                 ) { Text(stringResource(R.string.action_not_now)) }
             },
         )
+    }
+}
+
+/**
+ * Home health colors (specs/06 §2.3): one chip per account — colored dot
+ * (green/yellow/red) + provider label; tapping opens the diagnostics screen.
+ */
+@Composable
+private fun AccountHealthStrip(
+    accounts: List<AccountHealthUi>,
+    onOpenDiagnostics: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        accounts.forEach { account ->
+            val verdictLabel = stringResource(account.verdict.labelRes())
+            androidx.compose.material3.AssistChip(
+                onClick = onOpenDiagnostics,
+                label = { Text(account.provider.removeSuffix("_drive").replace('_', ' '), maxLines = 1) },
+                leadingIcon = {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(account.verdict.color(), androidx.compose.foundation.shape.CircleShape)
+                            .semantics { contentDescription = verdictLabel },
+                    )
+                },
+                modifier = Modifier.padding(end = 8.dp),
+            )
+        }
     }
 }
 

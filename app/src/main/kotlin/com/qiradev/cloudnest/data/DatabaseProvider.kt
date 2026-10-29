@@ -38,6 +38,18 @@ object DatabaseProvider {
     }
 
     /**
+     * Backup/restore support (specs/08 §4.2): closes the singleton and clears it so
+     * the next [get] opens the (replaced) database file fresh — versioned migrations
+     * apply on that open. Callers must not keep using a previous instance.
+     */
+    fun closeAndReset() {
+        synchronized(this) {
+            instance?.let { db -> runCatching { db.close() } }
+            instance = null
+        }
+    }
+
+    /**
      * Room resolves database names through the context, so this wrapper redirects
      * open/delete/getDatabasePath into [directory].
      */

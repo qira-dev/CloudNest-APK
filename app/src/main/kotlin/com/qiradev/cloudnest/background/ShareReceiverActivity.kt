@@ -26,7 +26,8 @@ class ShareReceiverActivity : ComponentActivity() {
                 if (uris.isNotEmpty()) {
                     val db = AppServices.db(applicationContext)
                     val rootId = AppServices.archiveService(db).ensureRootFolder().id
-                    val upload = AppServices.uploadService(db)
+                    // Settings-aware enqueue (specs/01 §1.2): the stored chunk size lands on the file row.
+                    val (upload, _) = AppServices.liveTransferServices(applicationContext, db)
                     val queued = ShareUploads.enqueueFromShareUris(
                         applicationContext,
                         db,

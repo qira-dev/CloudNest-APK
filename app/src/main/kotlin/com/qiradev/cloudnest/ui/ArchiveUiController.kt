@@ -10,6 +10,8 @@ import com.qiradev.cloudnest.data.entity.FolderEntity
 import com.qiradev.cloudnest.data.entity.PlacementRole
 import com.qiradev.cloudnest.data.entity.PlacementStatus
 import com.qiradev.cloudnest.engine.archive.ArchiveService
+import com.qiradev.cloudnest.engine.health.Health
+import com.qiradev.cloudnest.engine.health.HealthTracker
 import com.qiradev.cloudnest.engine.mirror.MirrorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -71,6 +73,15 @@ sealed interface FileDetailUiState {
     ) : FileDetailUiState
 }
 
+/** One account's health chip on the home screen (specs/06 §2.3). */
+data class AccountHealthUi(
+    val accountId: String,
+    val provider: String,
+    val label: String,
+    val verdict: Health,
+    val lastErrorCode: String?,
+)
+
 /**
  * Drives the archive + trash screens (specs/09 screens 3/4/11) on top of
  * [ArchiveService]. Pure state holder — no Android imports — so the flows are
@@ -82,6 +93,7 @@ class ArchiveUiController(
     private val archive: ArchiveService,
     private val mirror: MirrorService,
     private val scope: CoroutineScope,
+    private val health: HealthTracker? = null,
 ) {
     var folderState: FolderUiState by mutableStateOf(FolderUiState.Loading)
         private set
@@ -90,6 +102,10 @@ class ArchiveUiController(
         private set
 
     var fileDetailState: FileDetailUiState by mutableStateOf(FileDetailUiState.Loading)
+        private set
+
+    /** Home health strip (specs/06 §2.3): color + reason per connected account. */
+    var accountHealth: List<AccountHealthUi> by mutableStateOf(emptyList())
         private set
 
     /** Bumped after every mutation so screens can react without polling. */
@@ -113,6 +129,7 @@ class ArchiveUiController(
                 val root = currentFolderId?.let { db.folderDao().getById(it) }
                     ?: archive.ensureRootFolder().also { currentFolderId = it.id }
                 val crumbs = archive.breadcrumbs(root.id)
+                refreshAccountHealth()
                 FolderUiState.Ready(
                     breadcrumbs = crumbs,
                     folders = db.folderDao().listChildren(root.id),
@@ -121,6 +138,21 @@ class ArchiveUiController(
             } catch (e: Exception) {
                 FolderUiState.Error(e.message ?: "unknown")
             }
+        }
+    }
+
+    /** specs/06 §2.3: health color + reason next to every account on the home screen. */
+    private suspend fun refreshAccountHealth() {
+        val tracker = health ?: return
+        accountHealth = db.providerAccountDao().getAll().map { account ->
+            val recent = tracker.recentFailures(account.id, limit = 1)
+            AccountHealthUi(
+                accountId = account.id,
+                provider = account.provider,
+                label = account.label,
+                verdict = tracker.verdict(account.id),
+                lastErrorCode = recent.firstOrNull()?.errorCode,
+            )
         }
     }
 

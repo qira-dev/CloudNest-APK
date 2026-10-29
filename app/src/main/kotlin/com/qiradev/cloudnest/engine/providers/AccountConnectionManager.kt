@@ -166,6 +166,36 @@ class AccountConnectionManager(
         audit(AuditEventType.ACCOUNT_DISCONNECTED, accountId)
     }
 
+    /**
+     * Non-swallowing quota probe for the diagnostics "test connection"
+     * (specs/06 §3.4): refreshes tokens when needed, reads the quota and stores
+     * the observation exactly like [refreshQuota] — but unlike it, the failure
+     * propagates so the caller can show the exact outcome. The health ledger
+     * records the call either way (specs/06 §2.1).
+     */
+    suspend fun probeQuota(accountId: String) {
+        val account = account(accountId)
+        val tokens = getValidTokens(accountId)
+        val now = clock()
+        try {
+            val quota = connectorFor(account.provider).readQuota(tokens)
+                ?: throw ProviderException(ProviderErrorCode.QUOTA_UNKNOWN)
+            health?.recordSuccess(accountId, kind = "quota")
+            accountDao.update(
+                account.copy(
+                    quotaTotalBytes = quota.totalBytes,
+                    quotaUsedBytes = quota.usedBytes,
+                    quotaUnlimited = if (quota.unlimited) 1 else 0,
+                    quotaStatus = QuotaStatus.CURRENT,
+                    quotaObservedAt = now,
+                ),
+            )
+        } catch (e: ProviderException) {
+            health?.recordFailure(accountId, e.code, kind = "quota")
+            throw e
+        }
+    }
+
     private suspend fun observeQuota(accountId: String, connector: ProviderConnector, tokens: TokenPair) {
         val account = account(accountId)
         val now = clock()

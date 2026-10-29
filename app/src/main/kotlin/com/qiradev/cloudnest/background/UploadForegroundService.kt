@@ -78,8 +78,10 @@ class UploadForegroundService : Service() {
 
     private suspend fun drain() {
         val db = AppServices.db(applicationContext)
-        val upload = AppServices.uploadService(db)
-        val mirror = AppServices.mirrorService(db)
+        // Settings-aware services (specs/01 §1.2): Wi-Fi-only gate + chunk size +
+        // mirroring toggle are re-read every drain, so a settings change applies
+        // to the next run.
+        val (upload, mirror) = AppServices.liveTransferServices(applicationContext, db)
         TransferGate.own {
             if (draining) return@own
             draining = true

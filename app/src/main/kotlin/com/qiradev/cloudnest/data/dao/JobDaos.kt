@@ -60,6 +60,10 @@ interface TransferJobDao {
     @Query("SELECT * FROM transfer_jobs WHERE kind = :kind AND status = :status ORDER BY created_at")
     suspend fun listByKindAndStatus(kind: String, status: String): List<TransferJobEntity>
 
+    /** Diagnostics (specs/06 §3.2): most recently touched jobs, newest first. */
+    @Query("SELECT * FROM transfer_jobs ORDER BY updated_at DESC, created_at DESC LIMIT :limit")
+    suspend fun listRecent(limit: Int): List<TransferJobEntity>
+
     @Query("DELETE FROM transfer_jobs WHERE id = :id")
     suspend fun delete(id: String)
 }
@@ -87,6 +91,21 @@ interface UploadAttemptDao {
             "WHERE upload_attempts.finished_at IS NOT NULL AND upload_attempts.finished_at >= :since",
     )
     suspend fun recentAttemptOutcomes(since: Long): List<AttemptOutcome>
+
+    /** Diagnostics (specs/06 §3.3): recent failures with chunk + reason. */
+    @Query(
+        "SELECT files.name AS fileName, file_chunks.chunk_index AS chunkIndex, " +
+            "upload_attempts.error_code AS errorCode, upload_attempts.finished_at AS finishedAt, " +
+            "provider_accounts.label AS accountLabel " +
+            "FROM upload_attempts " +
+            "JOIN chunk_placements ON chunk_placements.id = upload_attempts.placement_id " +
+            "JOIN file_chunks ON file_chunks.id = chunk_placements.chunk_id " +
+            "JOIN files ON files.id = file_chunks.file_id " +
+            "JOIN provider_accounts ON provider_accounts.id = chunk_placements.account_id " +
+            "WHERE upload_attempts.result = 'error' AND upload_attempts.finished_at IS NOT NULL " +
+            "ORDER BY upload_attempts.finished_at DESC LIMIT :limit",
+    )
+    suspend fun recentFailureRows(limit: Int): List<FailureRow>
 }
 
 /** Flat projection for [UploadAttemptDao.recentAttemptOutcomes]. */
@@ -95,6 +114,15 @@ data class AttemptOutcome(
     val result: String?,
     val errorCode: String?,
     val finishedAt: Long,
+)
+
+/** Flat projection for [UploadAttemptDao.recentFailureRows] (specs/06 §3.3). */
+data class FailureRow(
+    val fileName: String,
+    val chunkIndex: Int,
+    val errorCode: String?,
+    val finishedAt: Long,
+    val accountLabel: String,
 )
 
 @Dao

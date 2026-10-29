@@ -72,4 +72,71 @@
     <string name="provider_onedrive">OneDrive</string>
     <string name="provider_pcloud">pCloud</string>
     <string name="provider_mega">MEGA</string>
+
+    <!-- Health strip on the home screen (specs/06 §2.3) + settings entry. -->
+    <string name="cd_open_settings">Open settings</string>
+    <string name="cd_account_health">Account health: %1$s</string>
+    <string name="health_healthy">Healthy</string>
+    <string name="health_degraded">Degraded</string>
+    <string name="health_down">Down</string>
+
+    <!-- Diagnostics (specs/06 §3). -->
+    <string name="screen_diagnostics">Diagnostics</string>
+    <string name="diagnostics_accounts">Accounts</string>
+    <string name="diagnostics_jobs">Transfer jobs</string>
+    <string name="diagnostics_failures">Recent failures</string>
+    <string name="action_sweep_stuck_jobs">Sweep stuck jobs</string>
+    <string name="sweep_done">Stuck jobs swept</string>
+    <string name="action_test_connection">Test connection</string>
+    <string name="test_running">Testing…</string>
+    <string name="test_ok">OK</string>
+    <string name="test_failed">Failed: %1$s</string>
+    <string name="diagnostics_empty_accounts">No accounts connected yet</string>
+    <string name="diagnostics_empty_jobs">No transfer jobs</string>
+    <string name="diagnostics_empty_failures">No recent failures</string>
+    <string name="label_quota_usage">%1$s of %2$s used</string>
+    <string name="label_quota_unlimited">Unlimited storage</string>
+    <string name="label_quota_unknown">Quota unknown</string>
+    <string name="label_quota_observed">Last observed: %1$s</string>
+    <string name="label_reservations">Reserved: %1$s</string>
+    <string name="label_last_error">Last error: %1$s</string>
+    <string name="failure_row">%1$s · chunk %2$d · %3$s</string>
+    <string name="job_kind_upload">Upload</string>
+    <string name="job_kind_download">Download</string>
+    <string name="job_kind_mirror">Mirror</string>
+    <string name="job_kind_purge">Purge</string>
+    <string name="job_status_queued">Queued</string>
+    <string name="job_status_running">Running</string>
+    <string name="job_status_paused">Paused</string>
+    <string name="job_status_done">Done</string>
+    <string name="job_status_failed">Failed</string>
+    <string name="job_status_cancelled">Cancelled</string>
+
+    <!-- Settings (specs/09 §13 — step-8 scope: storage policy + backup). -->
+    <string name="screen_settings">Settings</string>
+    <string name="group_upload">Upload</string>
+    <string name="setting_wifi_only">Wi-Fi only uploads</string>
+    <string name="setting_wifi_only_hint">Uploads wait for a Wi-Fi network</string>
+    <string name="setting_chunk_size">Chunk size</string>
+    <string name="chunk_size_value">%1$d MiB</string>
+    <string name="setting_mirror">Mirror chunks (second copy)</string>
+    <string name="setting_mirror_hint">A second copy of every chunk on another account of the same provider</string>
+    <string name="group_trash">Trash</string>
+    <string name="setting_trash_retention">Trash retention</string>
+    <string name="trash_retention_value">%1$d days</string>
+    <string name="group_backup">Backup</string>
+    <string name="action_export_backup">Export backup</string>
+    <string name="action_import_backup">Restore from backup</string>
+    <string name="dialog_backup_export_title">Export the archive ledger?</string>
+    <string name="dialog_backup_export_text">This file holds the archive ledger — files, chunk map and settings. Keep it somewhere safe. Tokens are not included; accounts sign in again after a restore.</string>
+    <string name="dialog_backup_import_title">Restore from backup?</string>
+    <string name="dialog_backup_import_text">The current ledger is replaced by the backup. Every account must sign in again afterwards. The app restarts when the restore completes.</string>
+    <string name="backup_last_at">Last backup: %1$s</string>
+    <string name="backup_never">Never backed up</string>
+    <string name="backup_reminder">Weekly backup reminder</string>
+    <string name="backup_reminder_due">It has been over a week since the last backup</string>
+    <string name="backup_export_done">Backup exported</string>
+    <string name="backup_restore_done">Archive restored — accounts need to sign in again. Restarting…</string>
+    <string name="backup_failed">Backup failed: %1$s</string>
+    <string name="backup_invalid">Not a valid CloudNest backup: %1$s</string>
 </resources>

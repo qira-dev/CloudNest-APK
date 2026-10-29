@@ -35,8 +35,8 @@ class JobReviveWorker(
         }
         withTimeoutOrNull(BUDGET_MS) {
             TransferGate.own {
-                val upload = services?.first ?: AppServices.uploadService(db)
-                val mirror = services?.second ?: AppServices.mirrorService(db)
+                val (upload, mirror) = services
+                    ?: AppServices.liveTransferServices(applicationContext, db)
                 upload.recoverAtStartup()
                 mirror.recoverAtStartup()
                 while (true) {
