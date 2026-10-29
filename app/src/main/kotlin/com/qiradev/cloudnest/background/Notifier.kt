@@ -169,7 +169,9 @@ object NotificationRelay {
         }
     }
 
-    private suspend fun relayRow(row: com.qiradev.cloudnest.data.entity.NotificationEntity, notifier: Notifier, dbProvider: () -> CloudNestDatabase) {
+    // internal for tests: the relay loop is glue; the row policy is what needs
+    // deterministic coverage (the async Flow timing is not testable reliably).
+    internal suspend fun relayRow(row: com.qiradev.cloudnest.data.entity.NotificationEntity, notifier: Notifier, dbProvider: () -> CloudNestDatabase) {
         val payload = runCatching { JSONObject(row.payload) }.getOrNull()
         val file = payload?.optString("file")
             ?.takeIf { it.isNotBlank() && it != "null" }

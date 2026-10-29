@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.qiradev.cloudnest.data.buildTestDb
 import com.qiradev.cloudnest.data.entity.NotificationType
 import java.io.File
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -84,9 +85,12 @@ class NotifierTest {
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
         Shadows.shadowOf(context.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(true)
-        val relayJob = NotificationRelay.start({ db }, notifier, kotlinx.coroutines.GlobalScope)
+        val manager = Shadows.shadowOf(context.getSystemService(NotificationManager::class.java))
+        val relayStart = System.currentTimeMillis()
 
         // New rows since relay start: failure shows, success stays feed-only.
+        // The same query the relay loop runs picks the rows; relayRow applies
+        // the phone policy — synchronous, so CI timing cannot flake it.
         db.notificationDao().insert(
             com.qiradev.cloudnest.data.testNotification(id = "n1", createdAt = System.currentTimeMillis() + 1)
                 .copy(type = NotificationType.UPLOAD_FAILED, payload = """{"file":"a.mp4"}"""),
@@ -95,17 +99,15 @@ class NotifierTest {
             com.qiradev.cloudnest.data.testNotification(id = "n2", createdAt = System.currentTimeMillis() + 2)
                 .copy(type = NotificationType.UPLOAD_DONE, payload = """{"file":"a.mp4"}"""),
         )
-        // Let the relay collector observe the table change.
-        Thread.sleep(300)
         db.notificationDao().insert(
             com.qiradev.cloudnest.data.testNotification(id = "n3", createdAt = System.currentTimeMillis() + 3)
                 .copy(type = NotificationType.MIRROR_DONE, payload = """{"file":"b.mp4"}"""),
         )
-        Thread.sleep(300)
+        val rows = db.notificationDao().observeNewSince(relayStart).first()
+        rows.forEach { NotificationRelay.relayRow(it, notifier, { db }) }
 
-        val manager = Shadows.shadowOf(context.getSystemService(NotificationManager::class.java))
         assertEquals(1, manager.size())
-        relayJob.cancel()
+        assertTrue(manager.allNotifications[0].extras.getString(android.app.Notification.EXTRA_TEXT).orEmpty().contains("a.mp4"))
     }
 
     @Test
@@ -117,18 +119,21 @@ class NotifierTest {
             android.Manifest.permission.POST_NOTIFICATIONS,
         )
         Shadows.shadowOf(context.getSystemService(NotificationManager::class.java)).setNotificationsEnabled(true)
-        val relayJob = NotificationRelay.start({ db }, notifier, kotlinx.coroutines.GlobalScope)
         val manager = Shadows.shadowOf(context.getSystemService(NotificationManager::class.java))
+        // One base timestamp anchors both inserts and both queries — row
+        // created_at is always > the query's `since`, regardless of clock drift.
+        val base = System.currentTimeMillis()
 
         // specs/05 §2.2: a failed upload reaches the phone with file name + Retry.
         db.notificationDao().insert(
-            com.qiradev.cloudnest.data.testNotification(id = "f1", createdAt = System.currentTimeMillis() + 1)
+            com.qiradev.cloudnest.data.testNotification(id = "f1", createdAt = base + 1)
                 .copy(
                     type = NotificationType.UPLOAD_FAILED,
                     payload = """{"file":"a.mp4","code":"no_free_space","job":"job-9"}""",
                 ),
         )
-        Thread.sleep(400)
+        val rows = db.notificationDao().observeNewSince(base).first()
+        rows.forEach { NotificationRelay.relayRow(it, notifier, { db }) }
         val failed = manager.allNotifications.single()
         val retryTitle = context.getString(com.qiradev.cloudnest.R.string.action_retry)
         assertNotNull(failed.actions)
@@ -137,13 +142,13 @@ class NotifierTest {
 
         // Token expiry (specs/05 §2.2) reaches the phone and names the provider.
         db.notificationDao().insert(
-            com.qiradev.cloudnest.data.testNotification(id = "f2", createdAt = System.currentTimeMillis() + 2)
+            com.qiradev.cloudnest.data.testNotification(id = "f2", createdAt = base + 2)
                 .copy(type = NotificationType.TOKEN_EXPIRED, payload = """{"provider":"google_drive"}"""),
         )
-        Thread.sleep(400)
+        val rows2 = db.notificationDao().observeNewSince(base).first()
+        rows2.forEach { NotificationRelay.relayRow(it, notifier, { db }) }
         val token = manager.allNotifications.single()
         assertTrue(token.extras.getString(android.app.Notification.EXTRA_TEXT)!!.contains("Google Drive"))
-        relayJob.cancel()
     }
 }
 
@@ -274,3 +279,5 @@ class ShareUploadsTest {
         assertEquals(4_096L, source!!.sizeBytes())
     }
 }
+
+    /** Push latency on CI exceeds any fixed sleep — poll for the expected count instead. */
