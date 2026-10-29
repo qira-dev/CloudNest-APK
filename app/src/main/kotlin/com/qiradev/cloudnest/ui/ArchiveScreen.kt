@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,7 +86,7 @@ fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
     val units = listOf("KB", "MB", "GB", "TB")
     var value = bytes.toDouble()
-    var unit = 0
+    var unit = -1
     while (value >= 1024 && unit < units.lastIndex) {
         value /= 1024
         unit++
@@ -123,6 +124,9 @@ fun ArchiveScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppServices.db(context) }
+
+    // Initial folder load — sibling screens (Accounts/Queue/Notifications) self-load the same way.
+    LaunchedEffect(Unit) { onOpenRoot() }
 
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showBatteryDialog by remember { mutableStateOf(false) }
